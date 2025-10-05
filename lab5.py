@@ -1,10 +1,10 @@
 import RPi.GPIO as GPIO
 import math
 import time
-p = [4,17] # gpio pins
+p = [4,17,27,22,10,9,11,19,26,13] # gpio pins
 GPIO.setmode(GPIO.BCM)
 GPIO.setup(p, GPIO.OUT)
-pwms = [4,17,27,22,10,9,11,19,26,13]
+pwms = []
 for i in p:
     pwms.append(GPIO.PWM(i, 500))
 #pwm=GPIO.PWM(p, 500) # create 500hz pwm object
@@ -31,5 +31,6 @@ except KeyboardInterrupt:
         pwm.stop() # start pwm with 0% duty cycle
         
         GPIO.cleanup()
+
 
 
