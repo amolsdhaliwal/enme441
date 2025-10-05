@@ -3,7 +3,8 @@ import math
 import time
 p = 4 # pick a gpio pin to put here
 GPIO.setmode(GPIO.BCM)
-GPIO.setup([p,17], GPIO.OUT)
+GPIO.setup(p, GPIO.OUT)
+GPIO.setup(17, GPIO.OUT)
 pwm=GPIO.PWM(p, 500) # create 500hz pwm object
 pwm2=GPIO.PWM(17, 500)
 phi=math.pi/11 # phase shift
@@ -19,3 +20,4 @@ try:
 except KeyboardInterrupt:
     pwm.stop()
     GPIO.cleanup()
+
