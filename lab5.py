@@ -20,6 +20,8 @@ try:
         pwm2.ChangeDutyCycle((B2) * 100)
 except KeyboardInterrupt:
     pwm.stop()
+    pwm2.stop()
     GPIO.cleanup()
+
 
 
