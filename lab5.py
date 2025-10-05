@@ -14,5 +14,6 @@ try:
         B = (math.sin(2 * math.pi * f * t))**2      
         pwm.ChangeDutyCycle(B * 100) # change duty cycle  
 except KeyboardInterrupt:
-    pwm.stop()
-    GPIO.cleanup()
+    print("\nExiting")
+pwm.stop()
+GPIO.cleanup()
