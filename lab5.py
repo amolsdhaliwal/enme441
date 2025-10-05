@@ -3,7 +3,7 @@ import math
 import time
 p = 4 # pick a gpio pin to put here
 GPIO.setmode(GPIO.BCM)
-GPIO.output(p, GPIO.HIGH)
+GPIO.setup(p, GPIO.OUT)
 pwm=GPIO.PWM(p, 500) # create 500hz pwm object
 
 try:
@@ -17,4 +17,5 @@ except KeyboardInterrupt:
     print("\nExiting")
 pwm.stop()
 GPIO.cleanup()
+
 
