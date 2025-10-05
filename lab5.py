@@ -15,7 +15,8 @@ try:
         pwm.ChangeDutyCycle(B * 100) # change duty cycle  
 except KeyboardInterrupt:
     print("\nExiting")
-pwm.stop()
-GPIO.cleanup()
+    pwm.stop()
+    GPIO.cleanup()
+
 
 
