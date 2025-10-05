@@ -10,7 +10,7 @@ pwm2=GPIO.PWM(17, 500)
 phi=math.pi/11 # phase shift
 try:
     pwm.start(0) # start pwm with 0% duty cycle
-    pwm.start(0) # start pwm with 0% duty cycle
+    pwm2.start(0) # start pwm with 0% duty cycle
     while True:
         t = time.time()
         f=0.2 # hz
@@ -21,4 +21,5 @@ try:
 except KeyboardInterrupt:
     pwm.stop()
     GPIO.cleanup()
+
 
