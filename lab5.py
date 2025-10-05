@@ -6,8 +6,7 @@ GPIO.setmode(GPIO.BCM)
 GPIO.setup(p, GPIO.OUT)
 pwms = [4,17,27,22,10,9,11,19,26,13]
 for i in p:
-    pwm=GPIO.PWM(i, 500) # create 500hz pwm object
-    pwms.append(pwm)
+    pwms.append(GPIO.PWM(i, 500))
 #pwm=GPIO.PWM(p, 500) # create 500hz pwm object
 #pwm2=GPIO.PWM(17, 500)
 phi=math.pi/11 # phase shift
