@@ -31,7 +31,7 @@ try:
         pwm2.ChangeDutyCycle((B2) * 100)'''
         for i, pwm in enumerate(pwms):
             phi = control * i * (math.pi / 11)
-            B = control * (math.sin(2 * math.pi * f * t - phi)) ** 2
+            B = (math.sin(2 * math.pi * f * t - phi)) ** 2
             pwm.ChangeDutyCycle(B * 100)
 except KeyboardInterrupt:
     for pwm in pwms:
@@ -40,3 +40,4 @@ except KeyboardInterrupt:
         except:
             pass
     GPIO.cleanup()
+
