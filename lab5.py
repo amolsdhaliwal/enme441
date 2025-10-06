@@ -13,7 +13,6 @@ def myCallback(pin):
     print("Direction flipped")
     global control
     control *= -1
-    print("flip")
 GPIO.add_event_detect(button, GPIO.RISING, callback=myCallback, bouncetime=300)
 try:
     for pwm in pwms:
@@ -32,4 +31,5 @@ except KeyboardInterrupt:
         except:
             pass
     GPIO.cleanup()
+
 
