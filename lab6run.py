@@ -1,38 +1,37 @@
 import random
 import time
-from shifter import Shifter  # Import your Shifter class
-import RPi.GPIO as GPIO
+from shifter import Shifter
 
-
-# a. Instantiate a Shifter object
-led_controller = Shifter(23,25,24)
-
-# Initialize the LED position (0-7 represents the 8 LEDs)
-position = 4  # Start in the middle
-
-try:
-    # b. Random walk loop
-    while True:
-        # Create byte pattern with only one bit set at current position
-        pattern = 1 << position
+class Bug:
+    def __init__(self, timestep=0.1, x=3, isWrapOn=False):
+        self.timestep = timestep
+        self.x = x
+        self.isWrapOn = isWrapOn
+        self.__shifter = Shifter(23, 25, 24)
+        self._running = False  # Add flag for control
         
-        # Send pattern to shift register
-        led_controller.shiftByte(pattern)
+    def start(self):
+        self._running = True
         
-        # Wait for the time step
-        time.sleep(0.05)
-        
-        # Random walk: move +1 or -1 with equal probability
-        step = random.choice([-1, 1])
-        new_position = position + step
-        
-        # Boundary checking: prevent moving beyond edges
-        if 0 <= new_position <= 7:
-            position = new_position
-        # If new_position is out of bounds, position stays the same
-
-except KeyboardInterrupt:
-    # Turn off all LEDs when exiting
-    led_controller.shiftByte(0)
-    GPIO.cleanup()
-    
+        while self._running:  # Add this loop!
+            # Display current LED position
+            pattern = 1 << self.x
+            self.__shifter.shiftByte(pattern)
+            
+            # Wait for timestep
+            time.sleep(self.timestep)
+            
+            # Random walk: move +1 or -1
+            step = random.choice([-1, 1])
+            new_position = self.x + step
+            
+            # Handle boundaries based on isWrapOn
+            if self.isWrapOn:
+                self.x = new_position % 8
+            else:
+                if 0 <= new_position <= 7:
+                    self.x = new_position
+                    
+    def stop(self):
+        self._running = False  # Stop the loop
+        self.__shifter.shiftByte(0)
