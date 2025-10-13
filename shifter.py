@@ -1,27 +1,43 @@
+
 import RPi.GPIO as GPIO
 import time
 
 GPIO.setmode(GPIO.BCM)
+# dataPin, latchPin, clockPin = 23, 24, 25
 
-dataPin, latchPin, clockPin = 23, 24, 25
+class Shifter:
 
-GPIO.setup(dataPin, GPIO.OUT)
-GPIO.setup(latchPin, GPIO.OUT, initial=0) # start latch & clock low
-GPIO.setup(clockPin, GPIO.OUT, initial=0)
-
-pattern = 0b11100011 # pattern to display
-
-for i in range(8):
-  GPIO.output(dataPin, pattern & (1<<i))
-  GPIO.output(clockPin,1) # ping the clock pin to shift register data
-  time.sleep(0)
-  GPIO.output(clockPin,0)
+  def __init__(self,serialPin, clockPin, latchPin):
+      self.serialPin = serialPin
+      self.clockPin = clockPin
+      self.latchPin = latchPin
+      GPIO.setup(serialPin, GPIO.OUT)
+      GPIO.setup(latchPin, GPIO.OUT, initial=0) # start latch & clock low
+      GPIO.setup(clockPin, GPIO.OUT, initial=0)
+        
+  def __ping(self,p):
+    GPIO.output(p, 1) 
+    time.sleep(0)
+    GPIO.output(p, 0) 
+          
+          # public method to send a byte to the shift register
   
-GPIO.output(latchPin, 1) # ping the latch pin to send register to output
-time.sleep(0)
-GPIO.output(latchPin, 0)
+  def shiftByte(self, b):
+    for i in range(8):
+      GPIO.output(self.serialPin, b & (1 << i))
+      self.__ping(self.clockPin)  # shift data bit in
+    self.__ping(self.latchPin)      # output to LEDs
 
+
+# pattern = 0b01100110 # pattern to display, pattern now part of shiftbyte call
+
+
+
+
+
+"""# this part willnot be in shifter, will be in my other file whch will call shifter
 try:
+  shiftByte(pattern)
   while 1: pass
 except:
-  GPIO.cleanup()
+  GPIO.cleanup()"""
