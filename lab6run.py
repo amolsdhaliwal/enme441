@@ -6,6 +6,7 @@ class Bug:
     def __init__(self,timestep=.1,x=3,isWrapOn=False):
         self.timestep=timestep
         self.x=x
+        self.isWrapOn=isWrapOn
         self.__shifter=Shifter(23,25,24)
         
     def start(self):
