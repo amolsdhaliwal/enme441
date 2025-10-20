@@ -30,7 +30,7 @@ try:
         if toggleWrap != prev:
             if toggleWrap:
                 bug.isWrapOn = not bug.isWrapOn
-                time.sleep(.1)
+                time.sleep(.01)
             prev = toggleWrap
         if boost:
             bug.timestep = .1/3
