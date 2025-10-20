@@ -30,13 +30,11 @@ try:
         if toggleWrap != prev:
             if toggleWrap:
                 bug.isWrapOn = not bug.isWrapOn
-                time.sleep(.01)
             prev = toggleWrap
         if boost:
             bug.timestep = .1/3
         else:
             bug.timestep = .1
-        # time.sleep(0.01)  # Small delay for monitoring loop
         
 except KeyboardInterrupt:
     bug.stop()
