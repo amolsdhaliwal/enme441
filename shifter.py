@@ -35,25 +35,24 @@ class Bug:
         self.running = False
         self.thread = None
 
-    def _run(self):
+    def __run(self):
         while self.running:
             pattern = 1 << self.x
             self.__shifter.shiftByte(pattern)
             step = random.choice([-1, 1])
             xnew = self.x + step
-
             if self.isWrapOn:
                 self.x = xnew % 8
             else:
                 if 0 <= xnew <= 7:
                     self.x = xnew
-
             time.sleep(self.timestep)
 
     def start(self):
         if not self.running:
             self.running = True
-            self.thread = threading.Thread(target=self._run, daemon=True)
+            self.thread = threading.Thread(target=self.__run)
+            self.thread.daemon = True
             self.thread.start()
 
     def stop(self):
