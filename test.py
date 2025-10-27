@@ -45,8 +45,8 @@ def web_page():
     <meta name="viewport" content="width=device-width, initial-scale=1">
 
     <style>
-    html { font-family: Helvetica; text-align: center; }
-    p { font-size: 1.2rem; }
+    html{{ font-family: Helvetica; text-align: center; }}
+    p{{ font-size: 1.2rem; }}
     </style>
     </head>
 
