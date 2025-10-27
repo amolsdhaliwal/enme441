@@ -89,7 +89,11 @@ def parsePOSTdata(data):
 def serve_web_page():
     while True:
         print("Waiting for connection...")
-        conn, (client_ip, client_port) = s.accept()
+        try:
+            conn, (client_ip, client_port) = s.accept()
+        except OSError:
+            # Socket closed during shutdown; exit loop
+            break
         print(f"Connected: {client_ip}:{client_port}")
 
         client_message = conn.recv(2048).decode('utf-8')
@@ -100,21 +104,31 @@ def serve_web_page():
         # Check if a form was submitted
         if "led" in data_dict.keys():
             selected_led = data_dict["led"]
-            new_value = int(data_dict["brightness"])
+            try:
+                new_value = int(data_dict.get("brightness", "0"))
+            except ValueError:
+                new_value = 0
+            new_value = max(0, min(100, new_value))
 
             # Update stored brightness
-            brightness[selected_led] = new_value
+            if selected_led in brightness and selected_led in pwms:
+                brightness[selected_led] = new_value
+                # Apply brightness via PWM
+                pwms[selected_led].ChangeDutyCycle(new_value)
 
-            # Apply brightness via PWM
-            pwms[selected_led].ChangeDutyCycle(new_value)
-
-        # Send HTTP response
-        conn.send(b'HTTP/1.1 200 OK\r\n')
-        conn.send(b'Content-Type: text/html\r\n')
-        conn.send(b'Connection: close\r\n\r\n')
-
+        # Build response once, include Content-Length, and send in one call
+        body = web_page()
+        headers = (
+            b'HTTP/1.1 200 OK\r\n'
+            b'Content-Type: text/html\r\n'
+            + f'Content-Length: {len(body)}\r\n'.encode('utf-8')
+            + b'Connection: close\r\n\r\n'
+        )
         try:
-            conn.sendall(web_page())
+            conn.sendall(headers + body)
+        except BrokenPipeError:
+            # Client closed early; ignore
+            pass
         finally:
             conn.close()
 
@@ -126,7 +140,7 @@ s.bind(('', 80))
 s.listen(3)
 
 server_thread = threading.Thread(target=serve_web_page)
-server_thread.daemon = True
+# Non-daemon so we can join cleanly
 server_thread.start()
 
 # --------------------------
@@ -137,7 +151,10 @@ try:
         pass
 except KeyboardInterrupt:
     print("Shutting down...")
+    # Close socket first to unblock accept(), then join the thread
+    s.close()
+    server_thread.join()
+    # Stop PWM before GPIO cleanup
     for pwm in pwms.values():
         pwm.stop()
     gpio.cleanup()
-    s.close()
