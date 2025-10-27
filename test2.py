@@ -122,4 +122,79 @@ def web_page():
 # --------------------------
 def parsePOSTdata(data):
     data_dict = {}
-    idx = data
+    idx = data.find('\r\n\r\n')+4
+    data = data[idx:]
+    data_pairs = data.split('&')
+    for pair in data_pairs:
+        key_val = pair.split('=')
+        if len(key_val) == 2:
+            data_dict[key_val[0]] = key_val[1]
+    return data_dict
+
+# --------------------------
+# Web Server
+# --------------------------
+def serve_web_page():
+    while True:
+        print("Waiting for connection...")
+        try:
+            conn, (client_ip, client_port) = s.accept()
+        except OSError:
+            break  # socket closed; exit loop
+        print(f"Connected: {client_ip}:{client_port}")
+
+        client_message = conn.recv(2048).decode('utf-8')
+        print(f"Message:\n{client_message}")
+
+        data_dict = parsePOSTdata(client_message)
+
+        # Handle slider POSTs: led=<ledN>&brightness=<0..100>
+        if "led" in data_dict.keys():
+            selected_led = data_dict["led"]
+            try:
+                new_value = int(data_dict.get("brightness", "0"))
+            except ValueError:
+                new_value = 0
+            new_value = max(0, min(100, new_value))
+            if selected_led in brightness and selected_led in pwms:
+                brightness[selected_led] = new_value
+                pwms[selected_led].ChangeDutyCycle(new_value)
+
+        # Build a proper HTTP/1.1 response with Content-Length
+        body = web_page()
+        headers = (
+            b'HTTP/1.1 200 OK\r\n'
+            b'Content-Type: text/html; charset=utf-8\r\n'
+            + f'Content-Length: {len(body)}\r\n'.encode('utf-8')
+            + b'Connection: close\r\n\r\n'
+        )
+        try:
+            conn.sendall(headers + body)
+        except BrokenPipeError:
+            pass
+        finally:
+            conn.close()
+
+# --------------------------
+# Setup Socket
+# --------------------------
+s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+s.bind(('', 80))
+s.listen(3)
+
+server_thread = threading.Thread(target=serve_web_page)
+server_thread.start()
+
+# --------------------------
+# Main Loop
+# --------------------------
+try:
+    while True:
+        pass
+except KeyboardInterrupt:
+    print("Shutting down...")
+    s.close()          # unblock accept, then join
+    server_thread.join()
+    for pwm in pwms.values():
+        pwm.stop()
+    gpio.cleanup()
