@@ -46,7 +46,7 @@ def web_page():
       <title>LED Brightness Control</title>
       <meta name="viewport" content="width=device-width, initial-scale=1">
       <style>
-        body { font-family: Helvetica, Arial, sans-serif; margin: 20px; }
+        body { { font-family: Helvetica, Arial, sans-serif; margin: 20px; } }
         .row { display: flex; align-items: center; gap: 14px; margin: 14px 0; }
         .label { width: 60px; font-weight: 600; }
         .slider { flex: 1; }
