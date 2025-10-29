@@ -13,11 +13,8 @@ pins = {
 for pin in pins.values():
     gpio.setup(pin, gpio.OUT)
 
-pwms = {
-    "led1": gpio.PWM(pins["led1"], 500),
-    "led2": gpio.PWM(pins["led2"], 500),
-    "led3": gpio.PWM(pins["led3"], 500)
-}
+pwms = {led: gpio.PWM(pin, 500) for led, pin in pins.items()}
+
 
 for pwm in pwms.values():
     pwm.start(0)
@@ -27,7 +24,6 @@ brightness = {
     "led2": 0,
     "led3": 0
 }
-
 
 def web_page():
     html = """
@@ -47,7 +43,7 @@ def web_page():
         <input type="range" id="brightness" name="brightness" min="0" max="100" value="0"><br><br>
 
         <p>Select LED:</p>
-        <input type="radio" name="led" value="led1" checked> LED 1 ({0}%)<br>
+        <input type="radio" name="led" value="led1"> LED 1 ({0}%)<br>
         <input type="radio" name="led" value="led2"> LED 2 ({1}%)<br>
         <input type="radio" name="led" value="led3"> LED 3 ({2}%)<br><br>
 
@@ -58,7 +54,6 @@ def web_page():
     """.format(brightness["led1"], brightness["led2"], brightness["led3"])
 
     return bytes(html, 'utf-8')
-
 
 def parsePOSTdata(data):
     data_dict = {}
@@ -79,21 +74,15 @@ def serve_web_page():
         client_message = conn.recv(2048).decode('utf-8')
         print(f"Message:\n{client_message}")
         data_dict = parsePOSTdata(client_message)
-
-        # Check if a form was submitted
         if "led" in data_dict.keys():
-            selected_led = data_dict["led"]
+            selected = data_dict["led"]
             try:
-                new_value = int(data_dict.get("brightness", "0"))
+                output = int(data_dict.get("brightness", "0"))
             except ValueError:
-                new_value = 0
-            new_value = max(0, min(100, new_value))
-
-            # Update stored brightness
-            if selected_led in brightness and selected_led in pwms:
-                brightness[selected_led] = new_value
-                # Apply brightness via PWM
-                pwms[selected_led].ChangeDutyCycle(new_value)
+                output = 0
+            output = max(0, min(100, output))
+            brightness[selected] = output
+            pwms[selected].ChangeDutyCycle(output)
 
         conn.send(b'HTTP/1.1 200 OK\r\n')
         conn.send(b'Content-Type: text/html\r\n')
@@ -120,7 +109,7 @@ except KeyboardInterrupt:
     pass
 finally:
     print('Joining webpageTread')
-    server_thread.join()
+    webpageTread.join()
     s.close()
     print("Shutting down...")
     for pwm in pwms.values():
