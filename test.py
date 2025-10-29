@@ -114,9 +114,9 @@ def serve_web_page():
         conn.send(b'Connection: close\r\n\r\n')
         try:
             conn.sendall(web_page())
-      #  except BrokenPipeError:
+        except BrokenPipeError:
             # Client closed early; ignore
-      #      pass
+            pass
         finally:
             conn.close()
 
