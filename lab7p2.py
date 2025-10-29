@@ -2,43 +2,29 @@ import RPi.GPIO as gpio
 import threading
 import socket
 
-# --------------------------
-# Raspberry Pi GPIO Setup
-# --------------------------
 gpio.setmode(gpio.BCM)
 
-# Assign LED pins
-led_pins = {
+pins = {
     "led1": 14,
     "led2": 15,
     "led3": 18
 }
 
-# Set pins as outputs
-for pin in led_pins.values():
+for pin in pins.values():
     gpio.setup(pin, gpio.OUT)
 
-# Create PWM objects at 1 kHz
-pwms = {
-    "led1": gpio.PWM(led_pins["led1"], 1000),
-    "led2": gpio.PWM(led_pins["led2"], 1000),
-    "led3": gpio.PWM(led_pins["led3"], 1000)
-}
+pwms = {led: gpio.PWM(pin, 500) for led, pin in pins.items()}
 
-# Start all PWM at 0% brightness
+
 for pwm in pwms.values():
     pwm.start(0)
 
-# Store brightness states
 brightness = {
     "led1": 0,
     "led2": 0,
     "led3": 0
 }
 
-# --------------------------
-# HTML Page (HTML + JS sliders)
-# --------------------------
 def web_page():
     html = """
     <html>
@@ -117,9 +103,7 @@ def web_page():
 
     return bytes(html, 'utf-8')
 
-# --------------------------
-# Parse POST Form Data
-# --------------------------
+
 def parsePOSTdata(data):
     data_dict = {}
     idx = data.find('\r\n\r\n')+4
@@ -131,70 +115,52 @@ def parsePOSTdata(data):
             data_dict[key_val[0]] = key_val[1]
     return data_dict
 
-# --------------------------
-# Web Server
-# --------------------------
 def serve_web_page():
     while True:
         print("Waiting for connection...")
-        try:
-            conn, (client_ip, client_port) = s.accept()
-        except OSError:
-            break  # socket closed; exit loop
+        conn, (client_ip, client_port) = s.accept()
         print(f"Connected: {client_ip}:{client_port}")
-
         client_message = conn.recv(2048).decode('utf-8')
         print(f"Message:\n{client_message}")
-
         data_dict = parsePOSTdata(client_message)
-
-        # Handle slider POSTs: led=<ledN>&brightness=<0..100>
         if "led" in data_dict.keys():
-            selected_led = data_dict["led"]
+            selected = data_dict["led"]
             try:
-                new_value = int(data_dict.get("brightness", "0"))
+                output = int(data_dict.get("brightness", "0"))
             except ValueError:
-                new_value = 0
-            new_value = max(0, min(100, new_value))
-            if selected_led in brightness and selected_led in pwms:
-                brightness[selected_led] = new_value
-                pwms[selected_led].ChangeDutyCycle(new_value)
+                output = 0
+            output = max(0, min(100, output))
+            brightness[selected] = output
+            pwms[selected].ChangeDutyCycle(output)
 
-        # Build a proper HTTP/1.1 response with Content-Length
-        body = web_page()
-        headers = (
-            b'HTTP/1.1 200 OK\r\n'
-            b'Content-Type: text/html; charset=utf-8\r\n'
-            + f'Content-Length: {len(body)}\r\n'.encode('utf-8')
-            + b'Connection: close\r\n\r\n'
-        )
+        conn.send(b'HTTP/1.1 200 OK\r\n')
+        conn.send(b'Content-Type: text/html\r\n')
+        conn.send(b'Connection: close\r\n\r\n')
         try:
-            conn.sendall(headers + body)
+            conn.sendall(web_page())
         except BrokenPipeError:
             pass
         finally:
             conn.close()
 
-# --------------------------
-# Setup Socket
-# --------------------------
 s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 s.bind(('', 80))
 s.listen(3)
+webpageTread = threading.Thread(target=serve_web_page)
+webpageTread.daemon = True
+webpageTread.start()
 
-server_thread = threading.Thread(target=serve_web_page)
-server_thread.start()
 
-# --------------------------
-# Main Loop
-# --------------------------
 try:
     while True:
         pass
 except KeyboardInterrupt:
+    pass
+finally:
+    print('Joining webpageTread')
+    webpageTread.join()
+    s.close()
     print("Shutting down...")
-    s.close()          # unblock accept, then join
-    server_thread.join()
     for pwm in pwms.values():
         pwm.stop()
     gpio.cleanup()
