@@ -36,9 +36,7 @@ brightness = {
     "led3": 0
 }
 
-# --------------------------
-# HTML Page
-# --------------------------
+
 def web_page():
     html = """
     <html><head><title>LED Brightness Control</title>
@@ -85,12 +83,9 @@ def serve_web_page():
     while True:
         print("Waiting for connection...")
         conn, (client_ip, client_port) = s.accept()
-
         print(f"Connected: {client_ip}:{client_port}")
-
         client_message = conn.recv(2048).decode('utf-8')
         print(f"Message:\n{client_message}")
-
         data_dict = parsePOSTdata(client_message)
 
         # Check if a form was submitted
@@ -108,43 +103,32 @@ def serve_web_page():
                 # Apply brightness via PWM
                 pwms[selected_led].ChangeDutyCycle(new_value)
 
-        # Build response once, include Content-Length, and send in one call
-        conn.send(b'HTTP/1.1 200 OK\r\n')                  # status line
-        conn.send(b'Content-Type: text/html\r\n')          # headers
+        conn.send(b'HTTP/1.1 200 OK\r\n')
+        conn.send(b'Content-Type: text/html\r\n')
         conn.send(b'Connection: close\r\n\r\n')
         try:
             conn.sendall(web_page())
         except BrokenPipeError:
-            # Client closed early; ignore
             pass
         finally:
             conn.close()
 
-# --------------------------
-# Setup Socket
-# --------------------------
 s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 s.bind(('', 80))
 s.listen(3)
-
 webpageTread = threading.Thread(target=serve_web_page)
 webpageTread.daemon = True
 webpageTread.start()
 
-# --------------------------
-# Main Loop
-# --------------------------
+
 try:
     while True:
         pass
 except KeyboardInterrupt:
-    # Close socket first to unblock accept(), then join the thread
     print('Joining webpageTread')
     server_thread.join()
     s.close()
     print("Shutting down...")
-
-    # Stop PWM before GPIO cleanup
     for pwm in pwms.values():
         pwm.stop()
     gpio.cleanup()
