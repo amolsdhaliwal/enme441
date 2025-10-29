@@ -69,9 +69,7 @@ def web_page():
 
     return bytes(html, 'utf-8')
 
-# --------------------------
-# Parse POST Form Data
-# --------------------------
+
 def parsePOSTdata(data):
     data_dict = {}
     idx = data.find('\r\n\r\n')+4
@@ -83,17 +81,11 @@ def parsePOSTdata(data):
             data_dict[key_val[0]] = key_val[1]
     return data_dict
 
-# --------------------------
-# Web Server
-# --------------------------
 def serve_web_page():
     while True:
         print("Waiting for connection...")
-        try:
-            conn, (client_ip, client_port) = s.accept()
-        except OSError:
-            # Socket closed during shutdown; exit loop
-            break
+        conn, (client_ip, client_port) = s.accept()
+
         print(f"Connected: {client_ip}:{client_port}")
 
         client_message = conn.recv(2048).decode('utf-8')
@@ -117,18 +109,14 @@ def serve_web_page():
                 pwms[selected_led].ChangeDutyCycle(new_value)
 
         # Build response once, include Content-Length, and send in one call
-        body = web_page()
-        headers = (
-            b'HTTP/1.1 200 OK\r\n'
-            b'Content-Type: text/html\r\n'
-            + f'Content-Length: {len(body)}\r\n'.encode('utf-8')
-            + b'Connection: close\r\n\r\n'
-        )
+        conn.send(b'HTTP/1.1 200 OK\r\n')                  # status line
+        conn.send(b'Content-Type: text/html\r\n')          # headers
+        conn.send(b'Connection: close\r\n\r\n')
         try:
-            conn.sendall(headers + body)
-        except BrokenPipeError:
+            conn.sendall(web_page())
+      #  except BrokenPipeError:
             # Client closed early; ignore
-            pass
+      #      pass
         finally:
             conn.close()
 
@@ -139,9 +127,9 @@ s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 s.bind(('', 80))
 s.listen(3)
 
-server_thread = threading.Thread(target=serve_web_page)
-# Non-daemon so we can join cleanly
-server_thread.start()
+webpageTread = threading.Thread(target=serve_web_page)
+webpageTread.daemon = True
+webpageTread.start()
 
 # --------------------------
 # Main Loop
@@ -150,10 +138,12 @@ try:
     while True:
         pass
 except KeyboardInterrupt:
-    print("Shutting down...")
     # Close socket first to unblock accept(), then join the thread
-    s.close()
+    print('Joining webpageTread')
     server_thread.join()
+    s.close()
+    print("Shutting down...")
+
     # Stop PWM before GPIO cleanup
     for pwm in pwms.values():
         pwm.stop()
