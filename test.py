@@ -2,34 +2,26 @@ import RPi.GPIO as gpio
 import threading
 import socket
 
-# --------------------------
-# Raspberry Pi GPIO Setup
-# --------------------------
 gpio.setmode(gpio.BCM)
 
-# Assign LED pins
-led_pins = {
+pins = {
     "led1": 14,
     "led2": 15,
     "led3": 18
 }
 
-# Set pins as outputs
-for pin in led_pins.values():
+for pin in pins.values():
     gpio.setup(pin, gpio.OUT)
 
-# Create PWM objects at 1 kHz
 pwms = {
-    "led1": gpio.PWM(led_pins["led1"], 500),
-    "led2": gpio.PWM(led_pins["led2"], 500),
-    "led3": gpio.PWM(led_pins["led3"], 500)
+    "led1": gpio.PWM(pins["led1"], 500),
+    "led2": gpio.PWM(pins["led2"], 500),
+    "led3": gpio.PWM(pins["led3"], 500)
 }
 
-# Start all PWM at 0% brightness
 for pwm in pwms.values():
     pwm.start(0)
 
-# Store brightness states
 brightness = {
     "led1": 0,
     "led2": 0,
