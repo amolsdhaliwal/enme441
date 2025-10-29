@@ -20,9 +20,9 @@ for pin in led_pins.values():
 
 # Create PWM objects at 1 kHz
 pwms = {
-    "led1": gpio.PWM(led_pins["led1"], 1000),
-    "led2": gpio.PWM(led_pins["led2"], 1000),
-    "led3": gpio.PWM(led_pins["led3"], 1000)
+    "led1": gpio.PWM(led_pins["led1"], 500),
+    "led2": gpio.PWM(led_pins["led2"], 500),
+    "led3": gpio.PWM(led_pins["led3"], 500)
 }
 
 # Start all PWM at 0% brightness
