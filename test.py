@@ -125,6 +125,8 @@ try:
     while True:
         pass
 except KeyboardInterrupt:
+    pass
+finally:
     print('Joining webpageTread')
     server_thread.join()
     s.close()
