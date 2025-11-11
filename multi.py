@@ -1,93 +1,100 @@
-# ...existing code...
+# stepper_class_shiftregister_parallel.py
+#
+# Stepper class with proper parallel operation for Lab 8
+
 import time
 import multiprocessing
-from shifter import Shifter   # our custom Shifter class
+from shifter import Shifter   # your custom Shifter class
 
 class Stepper:
     """
     Supports operation of an arbitrary number of stepper motors using
-    one or more shift registers.
-    ...
+    one or more shift registers in parallel.
     """
 
-    # Class attributes:
-    num_steppers = 0      # track number of Steppers instantiated
-    shifter_outputs = 0   # track shift register outputs for all motors
-    seq = [0b0001,0b0011,0b0010,0b0110,0b0100,0b1100,0b1000,0b1001] # CCW sequence
-    delay = 1200          # delay between motor steps [us]
-    steps_per_degree = 4096/360    # 4096 steps/rev * 1/360 rev/deg
+    # Class attributes
+    num_steppers = 0
+    shifter_outputs = 0
+    seq = [0b0001, 0b0011, 0b0010, 0b0110,
+           0b0100, 0b1100, 0b1000, 0b1001]  # CCW sequence
+    delay = 1200            # us per step
+    steps_per_degree = 4096/360  # 4096 steps/rev
 
-    def __init__(self, shifter, lock):
-        self.s = shifter           # shift register
-        # use a multiprocessing.Value so angle is visible/updated across processes
-        self.angle = multiprocessing.Value('d', 0.0)
-        self.step_state = 0        # track position in sequence
-        self.shifter_bit_start = 4*Stepper.num_steppers  # starting bit position
-        self.lock = lock           # multiprocessing lock (used per-step)
-        Stepper.num_steppers += 1   # increment the instance count
+    def __init__(self, shifter):
+        self.s = shifter
+        self.angle = multiprocessing.Value('d', 0.0)  # shared double
+        self.step_state = 0
+        self.shifter_bit_start = 4*Stepper.num_steppers
+        self.mask = 0b1111 << self.shifter_bit_start
+        self.lock = multiprocessing.Lock()  # each motor has its own lock
 
-    # Signum function:
+        Stepper.num_steppers += 1
+
+    # Sign function
     def __sgn(self, x):
-        if x == 0: return(0)
-        else: return(int(abs(x)/x))
+        if x == 0:
+            return 0
+        else:
+            return int(abs(x)/x)
 
-    # Move a single +/-1 step in the motor sequence:
+    # Take a single step in direction dir (+1/-1)
     def __step(self, dir):
-        self.step_state += dir    # increment/decrement the step
-        self.step_state %= 8      # ensure result stays in [0,7]
+        self.step_state = (self.step_state + dir) % 8
 
-        # Update only this motor's 4 bits in the shared shifter_outputs atomically
+        # Only lock the critical section
         with self.lock:
-            # clear the 4 bits for this motor
-            Stepper.shifter_outputs &= ~(0b1111 << self.shifter_bit_start)
-            # set the new 4-bit pattern for this motor
+            # Clear old bits
+            Stepper.shifter_outputs &= ~self.mask
+            # Insert new step pattern
             Stepper.shifter_outputs |= (Stepper.seq[self.step_state] << self.shifter_bit_start)
-            # write to the hardware once with the combined outputs
+            # Update shift register
             self.s.shiftByte(Stepper.shifter_outputs)
 
-        # update the shared angle value
+        # Update shared angle
         with self.angle.get_lock():
-            self.angle.value += dir/Stepper.steps_per_degree
-            self.angle.value %= 360         # limit to [0,359.9+] range
+            self.angle.value += dir / Stepper.steps_per_degree
+            self.angle.value %= 360
 
-    # Move relative angle from current position:
+    # Rotate relative angle delta
     def __rotate(self, delta):
-        # Do not lock the whole motion; lock only per-step in __step to allow interleaved motors
-        numSteps = int(Stepper.steps_per_degree * abs(delta))    # find the right # of steps
-        dir = self.__sgn(delta)        # find the direction (+/-1)
-        for s in range(numSteps):      # take the steps
+        numSteps = int(Stepper.steps_per_degree * abs(delta))
+        dir = self.__sgn(delta)
+        for _ in range(numSteps):
             self.__step(dir)
-            time.sleep(Stepper.delay/1e6)
+            time.sleep(Stepper.delay / 1e6)
 
-    # Move relative angle from current position:
+    # Public method to rotate (spawns a process)
     def rotate(self, delta):
-        time.sleep(0.1)
         p = multiprocessing.Process(target=self.__rotate, args=(delta,))
         p.start()
+        return p  # optionally track the process if needed
 
-    # Move to an absolute angle taking the shortest possible path:
-    def goAngle(self, angle):
-        # Read current angle from shared Value
+    # Move to an absolute angle using shortest path
+    def goAngle(self, target):
+        target %= 360
         with self.angle.get_lock():
-            cur = self.angle.value
-        # Compute minimal delta in (-180, 180]
-        delta = (angle - cur + 180) % 360 - 180
-        # If you prefer 180 -> +180 instead of -180, adjust here.
-        self.rotate(delta)
+            curr = self.angle.value
 
-    # Set the motor zero point
+        delta = target - curr
+        if delta > 180:
+            delta -= 360
+        elif delta < -180:
+            delta += 360
+
+        return self.rotate(delta)
+
+    # Set zero point
     def zero(self):
         with self.angle.get_lock():
             self.angle.value = 0.0
 
-
-# Example use:
-
+# Example usage
 if __name__ == '__main__':
 
     s = Shifter(data=16,latch=20,clock=21)   # set up Shifter
 
-    # Use multiprocessing.Lock() to protect each per-step update to shared shifter_outputs
+    # Use multiprocessing.Lock() to prevent motors from trying to 
+    # execute multiple operations at the same time:
     lock = multiprocessing.Lock()
 
     # Instantiate 2 Steppers:
@@ -98,16 +105,24 @@ if __name__ == '__main__':
     m1.zero()
     m2.zero()
 
-    # Move as desired; because __step locks only for the brief hardware update,
-    # m1 and m2 processes can interleave steps and run simultaneously:
+    # Move as desired, with eacg step occuring as soon as the previous 
+    # step ends:
     m1.rotate(-90)
-    m2.rotate(180)
     m1.rotate(45)
-    m2.rotate(-45)
+    m1.rotate(-90)
+    m1.rotate(45)
 
+    # If separate multiprocessing.lock objects are used, the second motor
+    # will run in parallel with the first motor:
+    m2.rotate(180)
+    m2.rotate(-45)
+    m2.rotate(45)
+    m2.rotate(-90)
+ 
+    # While the motors are running in their separate processes, the main
+    # code can continue doing its thing: 
     try:
         while True:
             pass
     except:
         print('\nend')
-# ...existing code...
