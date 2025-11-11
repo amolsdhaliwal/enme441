@@ -34,20 +34,28 @@ class Stepper:
 
     # Class attributes:
     num_steppers = 0      # track number of Steppers instantiated
-    shifter_outputs = 0   # track shift register outputs for all motors
+    
+    ### LAB 8 FIX (Concurrency) ###
+    # This value MUST be a shared multiprocessing object
+    shifter_outputs = multiprocessing.Value('i', 0) # 'i' for integer
+    
+    # This lock protects the shared shifter_outputs and the shift register hardware
+    bus_lock = multiprocessing.Lock()
+    
     seq = [0b0001,0b0011,0b0010,0b0110,0b0100,0b1100,0b1000,0b1001] # CCW sequence
-    delay = 5000          # delay between motor steps [us]
+    delay = 1200          # delay between motor steps [us]
     steps_per_degree = 4096/360    # 4096 steps/rev * 1/360 rev/deg
 
     def __init__(self, shifter, lock):
         self.s = shifter           # shift register
         
         # LAB 8 (Step 3b): Use multiprocessing.Value for shared angle
-        # 'd' stands for a double-precision float
         self.angle = multiprocessing.Value('d', 0.0)
         
         self.step_state = 0        # track position in sequence
         self.shifter_bit_start = 4*Stepper.num_steppers  # starting bit position
+        
+        # This lock is for this motor's *command queue* (e.g. goAngle)
         self.lock = lock           # multiprocessing lock
 
         Stepper.num_steppers += 1   # increment the instance count
@@ -62,41 +70,39 @@ class Stepper:
         self.step_state += dir    # increment/decrement the step
         self.step_state %= 8      # ensure result stays in [0,7]
 
-        # LAB 8 (Step 2): Modified bitwise operations for simultaneous control
-        # This new logic ensures only the 4 bits for THIS motor are changed,
-        # leaving the other motor's bits untouched.
-        
-        # 1. Create a "clear mask" to zero out this motor's 4 bits
-        #    Example (m1, bits 0-3): ~(0b00001111) -> 0b11110000
-        #    Example (m2, bits 4-7): ~(0b11110000) -> 0b00001111
-        clear_mask = ~(0b1111 << self.shifter_bit_start)
-        
-        # 2. Create the "set bits" for this motor's new step
-        #    Example (m1, seq[1]): 0b0011 << 0 -> 0b00000011
-        #    Example (m2, seq[2]): 0b0010 << 4 -> 0b00100000
-        set_bits = Stepper.seq[self.step_state] << self.shifter_bit_start
-        
-        # 3. Apply the masks:
-        #    First, zero out this motor's bits: (shifter_outputs & clear_mask)
-        #    Then, add this motor's new bits:   ... | set_bits
-        Stepper.shifter_outputs = (Stepper.shifter_outputs & clear_mask) | set_bits
+        ### LAB 8 FIX (Concurrency) ###
+        # This whole block must be atomic. We use the shared class 'bus_lock'
+        # to ensure m1 and m2 don't try to access the shift register at the
+        # exact same time, which would corrupt the output.
+        with Stepper.bus_lock:
+            # 1. Create a "clear mask"
+            clear_mask = ~(0b1111 << self.shifter_bit_start)
+            
+            # 2. Create the "set bits"
+            set_bits = Stepper.seq[self.step_state] << self.shifter_bit_start
+            
+            # 3. Read-modify-write the *shared* .value
+            current_outputs = Stepper.shifter_outputs.value
+            new_outputs = (current_outputs & clear_mask) | set_bits
+            Stepper.shifter_outputs.value = new_outputs
 
-        self.s.shiftByte(Stepper.shifter_outputs)
+            # 4. Send the new, complete byte to the hardware
+            self.s.shiftByte(new_outputs)
         
-        # LAB 8 (Step 3b): Update the .value of the shared angle
+        # This part is specific to this motor, so it's outside the bus lock
         self.angle.value += dir/Stepper.steps_per_degree
         self.angle.value = self.angle.value % 360  # limit to [0, 360) range
 
     # Move relative angle from current position:
     def __rotate(self, delta):
-        # Using a context manager for the lock is cleaner
+        # This 'self.lock' (e.g. lock1) ensures m1 finishes one goAngle
+        # command before starting its *next* goAngle command.
         with self.lock:
             numSteps = int(Stepper.steps_per_degree * abs(delta)) # find the right # of steps
             dir = self.__sgn(delta)        # find the direction (+/-1)
             for s in range(numSteps):      # take the steps
                 self.__step(dir)
                 time.sleep(Stepper.delay/1e6)
-        # lock is automatically released here
 
     # Move relative angle from current position:
     def rotate(self, delta):
@@ -107,22 +113,12 @@ class Stepper:
     # Move to an absolute angle taking the shortest possible path:
     def goAngle(self, angle):
          # LAB 8 (Step 3a): COMPLETE THIS METHOD
-         
-         # 1. Calculate the simple difference
-         #    (must read from .value of the shared angle)
          delta = angle - self.angle.value
-         
-         # 2. Normalize the delta to the shortest path [-180, 180]
-         #    (delta + 180) % 360 wraps the angle
-         #    ... - 180 shifts it back
          delta = (delta + 180) % 360 - 180
-
-         # 3. Call the rotate function with the shortest-path delta
          self.rotate(delta)
 
     # Set the motor zero point
     def zero(self):
-        # LAB 8 (Step 3b): Set the .value of the shared angle
         self.angle.value = 0
 
 
@@ -130,16 +126,34 @@ class Stepper:
 
 if __name__ == '__main__':
 
-    s = Shifter(data=16,latch=20,clock=21)   # set up Shifter
+    ### LAB 8 FIX (CRITICAL) ###
+    # Make sure these pins match your WORKING code!
+    # s = Shifter(data=16,latch=20,clock=21) # From original file
+    s = Shifter(data=16, clock=20, latch=21)  # From your working test file
 
     # LAB 8 (Step 2 & 4): Use *separate* multiprocessing.Lock() objects
-    # This is required to allow m1 and m2 to run in parallel.
+    # This allows m1 and m2 to run in parallel.
     lock1 = multiprocessing.Lock()
     lock2 = multiprocessing.Lock()
 
     # Instantiate 2 Steppers with their own locks:
-    m1 = Stepper(s, lock1)
-    m2 = Stepper(s, lock2)
+    # m2 (bits 4-7) must be instantiated *after* m1 (bits 0-3)
+    # as per the logic: self.shifter_bit_start = 4*Stepper.num_steppers
+    
+    # Wait, re-reading your working code:
+    # MASK_A = 0b1111 << 4   (bits 4-7)
+    # MASK_B = 0b1111         (bits 0-3)
+    # This means your "Motor A" uses bits 4-7 and "Motor B" uses bits 0-3.
+    
+    # In my class code:
+    # m1 = Stepper() -> self.shifter_bit_start = 0 (bits 0-3) -> This is Motor B
+    # m2 = Stepper() -> self.shifter_bit_start = 4 (bits 4-7) -> This is Motor A
+    
+    # This is correct. m1 is B, m2 is A.
+    
+    m1 = Stepper(s, lock1) # Corresponds to Motor B (bits 0-3 / Qe-Qh)
+    m2 = Stepper(s, lock2) # Corresponds to Motor A (bits 4-7 / Qa-Qd)
+
 
     # LAB 8 (Step 4): Demonstrate the required sequence
     
@@ -147,8 +161,6 @@ if __name__ == '__main__':
     m1.zero()
     m2.zero()
 
-    # These commands will now run in parallel, with each motor
-    # executing its own queue of commands.
     print("Starting motor commands...")
     m1.goAngle(90)
     m1.goAngle(-45)
@@ -159,8 +171,6 @@ if __name__ == '__main__':
     m1.goAngle(0)
     print("All commands issued.")
  
-    # While the motors are running in their separate processes, the main
-    # code must stay alive. 
     try:
         print("Main process is waiting... (Press Ctrl+C to exit)")
         while True:
