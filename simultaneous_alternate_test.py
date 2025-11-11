@@ -11,23 +11,24 @@ posB = 0  # motor wired to lower nibble (bits 0..3)
 delay = 1200/1e6
 
 # initialize outputs
-out = (cycle[posA] << 4) | (cycle[posB] << 0)
+out = (cycle[posA] << 4) | (cycle[posB])
 s.shiftByte(out)
 
 try:
-    for i in range(1024):  # try a few revolutions' worth of steps
-        # step motor A CCW once
+    for i in range(1024):
+        # Motor A CCW
         posA = (posA + 1) % 8
-        out &= ~(0b1111 << 4)
+        out &= ~(0xF << 4)
         out |= (cycle[posA] << 4)
         s.shiftByte(out)
         time.sleep(delay)
 
-        # step motor B CCW once
-        posB = (posB + 1) % 8
-        out &= ~0b1111
-        out |= (cycle[posB] << 0)
+        # Motor B CW (reverse direction)
+        posB = (posB - 1) % 8
+        out &= ~0xF
+        out |= cycle[posB]
         s.shiftByte(out)
         time.sleep(delay)
+
 except KeyboardInterrupt:
     pass
