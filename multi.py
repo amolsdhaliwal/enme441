@@ -132,36 +132,38 @@ if __name__ == '__main__':
 
     s = Shifter(data=16,latch=20,clock=21)   # set up Shifter
 
-    # Use multiprocessing.Lock() to prevent motors from trying to 
-    # execute multiple operations at the same time:
-    lock = multiprocessing.Lock()
+    # LAB 8 (Step 2 & 4): Use *separate* multiprocessing.Lock() objects
+    # This is required to allow m1 and m2 to run in parallel.
+    lock1 = multiprocessing.Lock()
+    lock2 = multiprocessing.Lock()
 
-    # Instantiate 2 Steppers:
-    m1 = Stepper(s, lock)
-    m2 = Stepper(s, lock)
+    # Instantiate 2 Steppers with their own locks:
+    m1 = Stepper(s, lock1)
+    m2 = Stepper(s, lock2)
 
+    # LAB 8 (Step 4): Demonstrate the required sequence
+    
     # Zero the motors:
     m1.zero()
     m2.zero()
 
-    # Move as desired, with eacg step occuring as soon as the previous 
-    # step ends:
-    m1.rotate(-90)
-    m1.rotate(45)
-    m1.rotate(-90)
-    m1.rotate(45)
-
-    # If separate multiprocessing.lock objects are used, the second motor
-    # will run in parallel with the first motor:
-    m2.rotate(180)
-    m2.rotate(-45)
-    m2.rotate(45)
-    m2.rotate(-90)
+    # These commands will now run in parallel, with each motor
+    # executing its own queue of commands.
+    print("Starting motor commands...")
+    m1.goAngle(90)
+    m1.goAngle(-45)
+    m2.goAngle(-90)
+    m2.goAngle(45)
+    m1.goAngle(-135)
+    m1.goAngle(135)
+    m1.goAngle(0)
+    print("All commands issued.")
  
     # While the motors are running in their separate processes, the main
-    # code can continue doing its thing: 
+    # code must stay alive. 
     try:
+        print("Main process is waiting... (Press Ctrl+C to exit)")
         while True:
             pass
-    except:
-        print('\nend')
+    except KeyboardInterrupt:
+        print('\nProgram terminated.')
