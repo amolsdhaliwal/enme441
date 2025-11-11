@@ -19,7 +19,7 @@ class Stepper:
     def __init__(self, shifter, lock, bit_start=None):
         self.s = shifter
         self.angle = multiprocessing.Value('d', 0.0)   # shared angle
-        self.step_state = 1                           # seq index
+        self.step_state = 2                           # seq index
         self.lock = lock
 
         # Determine which nibble (0-3 or 4-7) this motor uses
