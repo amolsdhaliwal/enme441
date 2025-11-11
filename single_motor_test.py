@@ -1,6 +1,6 @@
 # single_motor_test.py
 import time
-from stepper_class_shiftregister_multiprocessing import Stepper, Shifter
+from multishifter import Stepper, Shifter
 from shifter import Shifter
 import multiprocessing
 
