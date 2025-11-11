@@ -17,23 +17,30 @@ class Stepper:
     steps_per_degree = 4096.0 / 360.0
 
     def __init__(self, shifter, lock, bit_start=None):
-        """
-        shifter: Shifter instance
-        lock: multiprocessing.Lock() used to protect writes to the hardware
-        bit_start: optional explicit starting bit position (0,4,8,...). If omitted,
-                   the class auto-assigns 4*Stepper.num_steppers.
-        """
-        self.s = shifter
-        self.angle = multiprocessing.Value('d', 0.0)   # visible to child processes
-        self.step_state = 0
+    self.s = shifter
+    self.angle = multiprocessing.Value('d', 0.0)
+    self.step_state = 0
 
-        if bit_start is None:
-            self.shifter_bit_start = 4 * Stepper.num_steppers
-        else:
-            self.shifter_bit_start = int(bit_start)
+    if bit_start is None:
+        self.shifter_bit_start = 4 * Stepper.num_steppers
+    else:
+        self.shifter_bit_start = int(bit_start)
 
-        self.lock = lock
-        Stepper.num_steppers += 1
+    self.lock = lock
+
+    # >>> ADD THIS BLOCK HERE <<<
+    mask = (0b1111 << self.shifter_bit_start)
+    Stepper.shifter_outputs &= ~mask
+    Stepper.shifter_outputs |= (Stepper.seq[self.step_state] << self.shifter_bit_start)
+
+    self.lock.acquire()
+    try:
+        self.s.shiftByte(Stepper.shifter_outputs)
+    finally:
+        self.lock.release()
+    # >>> END OF ADDED BLOCK <<<
+
+    Stepper.num_steppers += 1
 
     def __sgn(self, x):
         if x == 0:
@@ -121,16 +128,8 @@ if __name__ == "__main__":
     m1.zero()
     m2.zero()
 
-    # commands from the lab to demonstrate simultaneous operation:
     m1.goAngle(90)
-    m1.goAngle(-45)
-
     m2.goAngle(-90)
-    m2.goAngle(45)
-
-    m1.goAngle(-135)
-    m1.goAngle(135)
-    m1.goAngle(0)
 
     try:
         while True:
