@@ -38,20 +38,21 @@ class Stepper:
         # advance through sequence
         self.step_state = (self.step_state + direction) % 8
 
-        # create mask for *only this motor’s 4 bits*
+        # create mask for *only this motor's 4 bits*
         mask = (0b1111 << self.shifter_bit_start)
 
-        # ✅ CLEAR this motor’s 4 bits
+        # ✅ CLEAR this motor's 4 bits
         Stepper.shifter_outputs &= ~mask
 
-        # ✅ SET this motor’s new 4-bit pattern
+        # ✅ SET this motor's new 4-bit pattern
         Stepper.shifter_outputs |= (Stepper.seq[self.step_state] << self.shifter_bit_start)
 
         # send to shift register
         self.s.shiftByte(Stepper.shifter_outputs)
 
-        # update shared angle
-        self.angle.value = (self.angle.value + direction / Stepper.steps_per_degree) % 360
+        # update shared angle with thread safety
+        with self.angle.get_lock():
+            self.angle.value = (self.angle.value + direction / Stepper.steps_per_degree) % 360
 
     def __rotate(self, delta):
         self.lock.acquire()
@@ -67,6 +68,7 @@ class Stepper:
 
     def rotate(self, delta):
         # Launch motor movement in its own process
+        time.sleep(0.1)  # small delay helps processes start cleanly
         p = multiprocessing.Process(target=self.__rotate, args=(delta,))
         p.start()
 
@@ -79,26 +81,31 @@ class Stepper:
         if delta > 180:
             delta -= 360
 
+        time.sleep(0.1)  # small delay helps processes start cleanly
         p = multiprocessing.Process(target=self.__rotate, args=(delta,))
         p.start()
 
     def zero(self):
-        self.angle.value = 0.0
+        with self.angle.get_lock():
+            self.angle.value = 0.0
 
 
 # Example Usage:
 if __name__ == "__main__":
 
     s = Shifter(data=16, latch=20, clock=21)
-    lock = multiprocessing.Lock()
+    
+    # ✅ FIX: Create SEPARATE locks for each motor
+    lock1 = multiprocessing.Lock()
+    lock2 = multiprocessing.Lock()
 
-    m1 = Stepper(s, lock)
-    m2 = Stepper(s, lock)
+    m1 = Stepper(s, lock1)  # m1 gets lock1
+    m2 = Stepper(s, lock2)  # m2 gets lock2
 
     m1.zero()
     m2.zero()
 
-    # both can move at same time
+    # Now both motors can move simultaneously!
     m1.rotate(-90)
     m1.rotate(45)
     m2.rotate(180)
