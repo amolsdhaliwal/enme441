@@ -58,8 +58,10 @@ class Stepper:
         # shift out the byte(s) to hardware
         self.s.shiftByte(Stepper.shifter_outputs)
 
-        # update the shared angle
-        self.angle.value = (self.angle.value + direction / Stepper.steps_per_degree) % 360
+        # FIXED: update the shared angle with proper locking
+        with self.angle.get_lock():
+            self.angle.value += direction / Stepper.steps_per_degree
+            self.angle.value %= 360
 
 
     # internal rotation, runs inside a separate process
@@ -77,7 +79,7 @@ class Stepper:
 
     # launch rotation in a new process
     def rotate(self, delta):
-        time.sleep(0.05)
+        time.sleep(0.1)  # FIXED: use 0.1 for consistency
         p = multiprocessing.Process(target=self.__rotate, args=(delta,))
         p.start()
 
@@ -107,25 +109,31 @@ class Stepper:
 
 
 
-# --- Example Usage ---
+# --- Task 4: Required Demonstration Sequence ---
 if __name__ == '__main__':
 
     s = Shifter(data=16, latch=20, clock=21)
 
-    # shared lock for both motors
-    lock = multiprocessing.Lock()
+    # FIXED: separate locks for simultaneous operation (Task 2)
+    lock1 = multiprocessing.Lock()
+    lock2 = multiprocessing.Lock()
 
-    m1 = Stepper(s, lock)
-    m2 = Stepper(s, lock)
+    m1 = Stepper(s, lock1)
+    m2 = Stepper(s, lock2)
 
     m1.zero()
     m2.zero()
 
-    # both can run simultaneously
-    m1.rotate(-90)
-    m1.rotate(45)
-    m2.rotate(180)
-    m2.rotate(-45)
+    # FIXED: Use the required demonstration sequence with goAngle()
+    m1.goAngle(90)      # m1: 0° → 90°
+    m1.goAngle(-45)     # m1: 90° → -45° (shortest path: -135°)
+    
+    m2.goAngle(-90)     # m2: 0° → -90°
+    m2.goAngle(45)      # m2: -90° → 45° (shortest path: +135°)
+    
+    m1.goAngle(-135)    # m1: -45° → -135° (shortest path: -90°)
+    m1.goAngle(135)     # m1: -135° → 135° (shortest path: -90° wraps to 270°)
+    m1.goAngle(0)       # m1: 135° → 0° (shortest path: -135°)
 
     try:
         while True:
