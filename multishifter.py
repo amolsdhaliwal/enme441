@@ -7,7 +7,7 @@ class Stepper:
     num_steppers = 0      # Track number of Steppers instantiated
     shifter_outputs = 0   # Track shift register outputs for all motors
     seq = [0b0001,0b0011,0b0010,0b0110,0b0100,0b1100,0b1000,0b1001] # CCW sequence
-    delay = 1200          # Delay between motor steps [us]
+    delay = 2400          # Delay between motor steps [us]
     steps_per_degree = 4096/360    # 4096 steps/rev * 1/360 rev/deg
 
     def __init__(self, shifter, lock):
