@@ -1,39 +1,48 @@
-# simultaneous_alternate_test.py
+# simultaneous_alternate_test_bitwise_fixed.py
 from shifter import Shifter
 import time
 import multiprocessing
 
 s = Shifter(data=16, clock=20, latch=21)
-cycle = [0b0001,0b0011,0b0010,0b0110,0b0100,0b1100,0b1000,0b1001]
 
-posA = 0  # motor A = upper nibble
-posB = 0  # motor B = lower nibble
+seq = [0b0001,0b0011,0b0010,0b0110,0b0100,0b1100,0b1000,0b1001]
+
+posA = 0
+posB = 0
+
+shifter_outputs = 0
 
 delay = 1200/1e6
 
-# multiprocessing lock
 lock = multiprocessing.Lock()
 
-# initialize outputs
-out = (cycle[posA] << 4) | cycle[posB]
-s.shiftByte(out)
+MASK_A = 0b1111 << 4      # A uses bits 4–7
+MASK_B = 0b1111           # B uses bits 0–3
 
 def stepA():
-    global posA, out
+    global posA, shifter_outputs
     lock.acquire()
-    posA = (posA + 1) % 8       # CCW
-    out &= ~(0xF << 4)
-    out |= (cycle[posA] << 4)
-    s.shiftByte(out)
+
+    posA = (posA + 1) % 8         # CCW
+    # 1) clear old A bits
+    shifter_outputs &= ~MASK_A
+    # 2) insert new pattern
+    shifter_outputs |= (seq[posA] << 4)
+
+    s.shiftByte(shifter_outputs)
     lock.release()
 
 def stepB():
-    global posB, out
+    global posB, shifter_outputs
     lock.acquire()
-    posB = (posB - 1) % 8       # CW
-    out &= ~0xF
-    out |= cycle[posB]
-    s.shiftByte(out)
+
+    posB = (posB - 1) % 8         # CW
+    # 1) clear old B bits
+    shifter_outputs &= ~MASK_B
+    # 2) insert new pattern
+    shifter_outputs |= seq[posB]
+
+    s.shiftByte(shifter_outputs)
     lock.release()
 
 
