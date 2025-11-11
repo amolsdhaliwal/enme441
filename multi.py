@@ -20,15 +20,15 @@ class Stepper:
     delay = 1200            # us per step
     steps_per_degree = 4096/360  # 4096 steps/rev
 
-    def __init__(self, shifter):
-        self.s = shifter
-        self.angle = multiprocessing.Value('d', 0.0)  # shared double
-        self.step_state = 0
-        self.shifter_bit_start = 4*Stepper.num_steppers
-        self.mask = 0b1111 << self.shifter_bit_start
-        self.lock = multiprocessing.Lock()  # each motor has its own lock
+   def __init__(self, shifter, lock):
+    self.s = shifter
+    self.angle = multiprocessing.Value('d', 0.0) # shared double
+    self.step_state = 0
+    self.shifter_bit_start = 4*Stepper.num_steppers
+    self.mask = 0b1111 << self.shifter_bit_start
+    self.lock = lock # use the provided lock
+    Stepper.num_steppers += 1
 
-        Stepper.num_steppers += 1
 
     # Sign function
     def __sgn(self, x):
