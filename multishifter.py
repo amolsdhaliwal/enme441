@@ -152,7 +152,7 @@ if __name__ == '__main__':
     # This is correct. m1 is B, m2 is A.
     
     m1 = Stepper(s, lock1) # Corresponds to Motor B (bits 0-3 / Qe-Qh)
-    m2 = Stepper(s, lock1) # Corresponds to Motor A (bits 4-7 / Qa-Qd)
+    m2 = Stepper(s, lock2) # Corresponds to Motor A (bits 4-7 / Qa-Qd)
 
 
     # LAB 8 (Step 4): Demonstrate the required sequence
@@ -161,14 +161,19 @@ if __name__ == '__main__':
     m1.zero()
     m2.zero()
 
-    print("Starting motor commands...")
-    m1.goAngle(90)
-    m1.goAngle(-45)
-    m2.goAngle(-90)
-    m2.goAngle(45)
-    m1.goAngle(-135)
-    m1.goAngle(135)
-    m1.goAngle(0)
+    # Move as desired, with eacg step occuring as soon as the previous 
+    # step ends:
+    m1.rotate(-90)
+    m1.rotate(45)
+    m1.rotate(-90)
+    m1.rotate(45)
+
+    # If separate multiprocessing.lock objects are used, the second motor
+    # will run in parallel with the first motor:
+    m2.rotate(180)
+    m2.rotate(-45)
+    m2.rotate(45)
+    m2.rotate(-90)
     print("All commands issued.")
  
     try:
