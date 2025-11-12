@@ -2,28 +2,27 @@ import time
 import multiprocessing
 from shifter import Shifter   # your custom Shifter class
 
-
-
 class Stepper:
     """
-    Supports operation of an arbitrary number of stepper motors using
-    one or more shift registers.
+    Stepper motor class supporting absolute angle moves with multiprocessing.
+    Multiple motors can spin simultaneously.
     """
 
-    # Class attributes:
+    # Class attributes
     num_steppers = 0
-    shifter_outputs = multiprocessing.Value('i', 0)
+    shifter_outputs = multiprocessing.Value('i', 0)  # shared shift register outputs
     shifter_lock = multiprocessing.Lock()
     seq = [0b0001,0b0011,0b0010,0b0110,0b0100,0b1100,0b1000,0b1001]  # CCW sequence
-    delay = 2000
+    delay = 2000  # microseconds
     steps_per_degree = 1024 / 360
 
     def __init__(self, shifter, lock):
         self.s = shifter
-        self.angle = multiprocessing.Value('d', 0.0)   # shared memory object
+        self.angle = multiprocessing.Value('d', 0.0)  # shared angle across processes
         self.step_state = 0
         self.shifter_bit_start = 4 * Stepper.num_steppers
         self.lock = lock
+        self._current_process = None  # track the current motor process
         Stepper.num_steppers += 1
 
     def __sgn(self, x):
@@ -31,7 +30,6 @@ class Stepper:
             return 0
         return int(abs(x) / x)
 
-    # accepts angle as parameter so shared Value can be updated
     def __step(self, dir, angle):
         self.step_state += dir
         self.step_state %= 8
@@ -45,7 +43,6 @@ class Stepper:
         angle.value += dir / Stepper.steps_per_degree
         angle.value %= 360
 
-    # passes self.angle to __step
     def __rotate(self, delta, angle):
         with self.lock:
             numSteps = int(Stepper.steps_per_degree * abs(delta))
@@ -54,14 +51,19 @@ class Stepper:
                 self.__step(dir, angle)
                 time.sleep(Stepper.delay / 1e6)
 
-    # now waits for process completion so angle updates correctly before next move
     def rotate(self, delta):
-        time.sleep(0.1)
+        """Start motor rotation in a separate process for this motor."""
+        # Wait for previous rotation of the same motor to finish
+        if self._current_process is not None:
+            self._current_process.join()
+
         p = multiprocessing.Process(target=self.__rotate, args=(delta, self.angle))
         p.start()
+        self._current_process = p
 
-    def goAngle(self, angle):
-        delta = angle - self.angle.value
+    def goAngle(self, target_angle):
+        """Move motor to an absolute angle via the shortest path."""
+        delta = target_angle - self.angle.value
         if delta > 180:
             delta -= 360
         elif delta < -180:
@@ -70,7 +72,6 @@ class Stepper:
 
     def zero(self):
         self.angle.value = 0
-
 
 # === Example use ===
 if __name__ == '__main__':
