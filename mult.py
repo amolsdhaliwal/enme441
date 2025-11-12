@@ -4,26 +4,24 @@ from shifter import Shifter   # your custom Shifter class
 
 class Stepper:
     """
-    Stepper motor class supporting absolute angle moves with multiprocessing.
-    Each motor waits for its previous rotation to finish before starting a new move.
-    Different motors can spin simultaneously.
+    Supports operation of multiple stepper motors using shift registers,
+    with multiprocessing for simultaneous control.
     """
 
-    # Class attributes
     num_steppers = 0
-    shifter_outputs = multiprocessing.Value('i', 0)  # shared shift register outputs
+    shifter_outputs = multiprocessing.Value('i', 0)
     shifter_lock = multiprocessing.Lock()
     seq = [0b0001,0b0011,0b0010,0b0110,0b0100,0b1100,0b1000,0b1001]  # CCW sequence
-    delay = 2000  # microseconds
-    steps_per_degree = 1024 / 360
+    delay = 2000
+    steps_per_degree = 1024 / 360  # adjust for your motor
 
     def __init__(self, shifter, lock):
         self.s = shifter
-        self.angle = multiprocessing.Value('d', 0.0)  # shared absolute angle
+        self.angle = multiprocessing.Value('d', 0.0)  # shared angle
         self.step_state = 0
         self.shifter_bit_start = 4 * Stepper.num_steppers
         self.lock = lock
-        self.active = None  # track the current process for this motor
+        self.active = None  # track current motor process
         Stepper.num_steppers += 1
 
     def __sgn(self, x):
@@ -32,6 +30,7 @@ class Stepper:
         return int(abs(x) / x)
 
     def __step(self, dir, angle):
+        """Perform one microstep."""
         self.step_state += dir
         self.step_state %= 8
         mask = ~(0b1111 << self.shifter_bit_start)
@@ -45,6 +44,7 @@ class Stepper:
         angle.value %= 360
 
     def __rotate(self, delta, angle):
+        """Rotate motor by delta degrees."""
         with self.lock:
             numSteps = int(Stepper.steps_per_degree * abs(delta))
             dir = self.__sgn(delta)
@@ -53,18 +53,18 @@ class Stepper:
                 time.sleep(Stepper.delay / 1e6)
 
     def rotate(self, delta):
-        """Start motor rotation in a separate process for this motor."""
-        # Wait for previous rotation of this motor to finish
-        if self.active is not None:
+        """Launch rotation in a new process (non-blocking)."""
+        # wait for previous move of *this motor* only
+        if self.active is not None and self.active.is_alive():
             self.active.join()
 
         p = multiprocessing.Process(target=self.__rotate, args=(delta, self.angle))
         p.start()
-        self.active = p  # store the process reference
+        self.active = p
 
-    def goAngle(self, target_angle):
-        """Move motor to an absolute angle via the shortest path."""
-        delta = target_angle - self.angle.value
+    def goAngle(self, angle):
+        """Move to absolute angle using shortest path."""
+        delta = angle - self.angle.value
         if delta > 180:
             delta -= 360
         elif delta < -180:
@@ -72,32 +72,52 @@ class Stepper:
         self.rotate(delta)
 
     def zero(self):
+        """Reset motor angle to zero."""
         self.angle.value = 0
+
+    def wait(self):
+        """Block until current movement finishes."""
+        if self.active is not None:
+            self.active.join()
 
 
 # === Example use ===
 if __name__ == '__main__':
-    # Initialize your shift register
     s = Shifter(data=16, clock=20, latch=21)
 
-    # Separate locks for each motor
     lock1 = multiprocessing.Lock()
     lock2 = multiprocessing.Lock()
 
-    # Instantiate two motors
     m1 = Stepper(s, lock1)
     m2 = Stepper(s, lock2)
 
-    # Zero both motors
     m1.zero()
     m2.zero()
 
-    # Your exact input sequence
+    # Example input sequence
     m1.goAngle(90)
-    m1.goAngle(-45)
-    m2.goAngle(-90)
-    m2.goAngle(45)
-    m1.goAngle(-135)
-    m1.goAngle(135)
-    m1.goAngle(0)
+    m2.goAngle(-90)  # starts simultaneously with m1
+    m1.wait()
+    m2.wait()
 
+    m1.goAngle(-45)
+    m2.goAngle(45)
+    m1.wait()
+    m2.wait()
+
+    m1.goAngle(-135)
+    m1.wait()
+    m1.goAngle(135)
+    m1.wait()
+    m1.goAngle(0)
+    m1.wait()
+
+    print("Final angles:")
+    print("Motor 1:", m1.angle.value)
+    print("Motor 2:", m2.angle.value)
+
+    try:
+        while True:
+            pass
+    except KeyboardInterrupt:
+        print("\nEnd")
