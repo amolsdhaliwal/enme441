@@ -95,7 +95,7 @@ if __name__ == '__main__':
      #   m1.active_proc.join()
     #print("Actual angle:", m1.angle.value)
     #if m2.active_proc:
-        m2.active_proc.join()
+      #  m2.active_proc.join()
     #print("Actual angle:", m2.angle.value)
 
 
