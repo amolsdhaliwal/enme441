@@ -152,7 +152,7 @@ if __name__ == '__main__':
     # This is correct. m1 is B, m2 is A.
     
     m1 = Stepper(s, lock1) # Corresponds to Motor B (bits 0-3 / Qe-Qh)
-    m2 = Stepper(s, lock2) # Corresponds to Motor A (bits 4-7 / Qa-Qd)
+    m2 = Stepper(s, lock1) # Corresponds to Motor A (bits 4-7 / Qa-Qd)
 
 
     # LAB 8 (Step 4): Demonstrate the required sequence
