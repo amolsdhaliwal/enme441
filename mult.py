@@ -55,10 +55,16 @@ class Stepper:
 
     # Move to an absolute angle via shortest path (robust version)
     def goAngle(self, a):
-        with self.angle.get_lock():
-            curr = self.angle.value
+     #   with self.angle.get_lock():
+       #     curr = self.angle.value
         # Compute shortest path delta (takes care of -180°/+180° wraparound)
-        delta = ((a - curr + 180) % 360) - 180
+       # delta = ((a - curr + 180) % 360) - 180
+       # self.rotate(delta)
+      #  delta = angle - self.angle.value
+        if delta > 180:
+            delta -= 360
+        elif delta < -180:
+            delta += 360
         self.rotate(delta)
 
     def zero(self):
@@ -82,21 +88,21 @@ if __name__ == '__main__':
     m1.goAngle(45)
 
     m2.goAngle(180)
-#    if m1.active_proc:
- #       m1.active_proc.join()
-  #  print("Actual angle:", m1.angle.value)
-   # if m2.active_proc:
-    #    m2.active_proc.join()
-   # print("Actual angle:", m2.angle.value)
+    if m1.active_proc:
+        m1.active_proc.join()
+    print("Actual angle:", m1.angle.value)
+    if m2.active_proc:
+        m2.active_proc.join()
+    print("Actual angle:", m2.angle.value)
     m1.goAngle(-45)
 
     m2.goAngle(0)
-    #if m1.active_proc:
-     #   m1.active_proc.join()
-    #print("Actual angle:", m1.angle.value)
-    #if m2.active_proc:
-      #  m2.active_proc.join()
-    #print("Actual angle:", m2.angle.value)
+    if m1.active_proc:
+        m1.active_proc.join()
+    print("Actual angle:", m1.angle.value)
+    if m2.active_proc:
+        m2.active_proc.join()
+    print("Actual angle:", m2.angle.value)
 
 
     try:
