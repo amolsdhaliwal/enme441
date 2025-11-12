@@ -56,10 +56,12 @@ class Stepper:
             curr = self.angle.value
         delta = ((angle - curr + 180) % 360) - 180     # maps to (–180,+180]
         self.rotate(delta)
-
+        
     def zero(self):
-        with self.angle.get_lock():
-            self.angle.value = 0
+        with self.lock:                # prevent rotation during zeroing
+            with self.angle.get_lock():  # atomic update
+                self.angle.value = 0
+
 
 
 # Example usage
