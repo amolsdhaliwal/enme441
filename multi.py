@@ -1,5 +1,3 @@
-# stepper_class_shiftregister_multiprocessing.py
-#
 # Stepper class
 #
 # Because only one motor action is allowed at a time, multithreading could be
