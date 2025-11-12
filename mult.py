@@ -87,7 +87,7 @@ if __name__ == '__main__':
 
     # Move both simultaneously
     m1.goAngle(90)
-    m2.goAngle(-90)
+    m1.goAngle(0)
 
     # Keep main process alive
     try:
