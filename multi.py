@@ -49,10 +49,14 @@ class Stepper:
 
         Stepper.num_steppers += 1   # increment the instance count
 
-    # Signum function:
+# Signum function:
     def __sgn(self, x):
-        if x == 0: return(0)
-        else: return(int(abs(x)/x))
+        if x > 0:
+            return 1
+        elif x < 0:
+            return -1
+        else:
+            return 0
 
     # Move a single +/-1 step in the motor sequence:
     def __step(self, dir):
