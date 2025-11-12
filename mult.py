@@ -1,6 +1,9 @@
 import time
 import multiprocessing
 from shifter import Shifter   # your custom Shifter class
+import RPi.GPIO as GPIO
+GPIO.setwarnings(False)
+GPIO.cleanup()
 
 class Stepper:
     """
