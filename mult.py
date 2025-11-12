@@ -89,12 +89,8 @@ if __name__ == '__main__':
 
     # Your exact test sequence
     m1.goAngle(90)
-    m1.goAngle(-45)
-    m2.goAngle(-90)
-    m2.goAngle(45)
-    m1.goAngle(-135)
-    m1.goAngle(135)
     m1.goAngle(0)
+
 
     try:
         while True:
