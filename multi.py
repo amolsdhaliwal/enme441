@@ -37,7 +37,7 @@ class Stepper:
     shifter_outputs = multiprocessing.Value('i', 0) #track shift register outputs
     shifter_lock = multiprocessing.Lock() # mutex
     seq = [0b0001,0b0011,0b0010,0b0110,0b0100,0b1100,0b1000,0b1001] # CCW sequence
-    delay = 1200          # delay between motor steps [us]
+    delay = 2000          # delay between motor steps [us]
     steps_per_degree = 1024/360    # 1024 steps/rev * 1/360 rev/deg  (bc 1:16 ratio)
 
     def __init__(self, shifter, lock):
