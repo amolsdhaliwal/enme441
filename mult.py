@@ -60,7 +60,7 @@ class Stepper:
         # Compute shortest path delta (takes care of -180°/+180° wraparound)
        # delta = ((a - curr + 180) % 360) - 180
        # self.rotate(delta)
-      #  delta = angle - self.angle.value
+        delta = angle - self.angle.value
         if delta > 180:
             delta -= 360
         elif delta < -180:
