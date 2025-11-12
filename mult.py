@@ -54,7 +54,7 @@ class Stepper:
         self.active_proc.start()
 
     # Move to an absolute angle via shortest path (robust version)
-    def goAngle(self, a):
+    def goAngle(self, angle):
      #   with self.angle.get_lock():
        #     curr = self.angle.value
         # Compute shortest path delta (takes care of -180°/+180° wraparound)
