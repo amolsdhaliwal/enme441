@@ -1,107 +1,87 @@
-# stepper_class_shiftregister_multiprocessing.py
+# stepper_class_shiftregister_queue.py
 #
-# Stepper class
-#
-# Because only one motor action is allowed at a time, multithreading could be
-# used instead of multiprocessing. However, the GIL makes the motor process run 
-# too slowly on the Pi Zero, so multiprocessing is needed.
+# Stepper class using per-motor command queue for parallel motion
 
 import time
 import multiprocessing
-from shifter import Shifter   # our custom Shifter class
+from shifter import Shifter
 
 class Stepper:
     """
-    Supports operation of an arbitrary number of stepper motors using
-    one or more shift registers.
-  
-    A class attribute (shifter_outputs) keeps track of all
-    shift register output values for all motors.  In addition to
-    simplifying sequential control of multiple motors, this schema also
-    makes simultaneous operation of multiple motors possible.
-   
-    Motor instantiation sequence is inverted from the shift register outputs.
-    For example, in the case of 2 motors, the 2nd motor must be connected
-    with the first set of shift register outputs (Qa-Qd), and the 1st motor
-    with the second set of outputs (Qe-Qh). This is because the MSB of
-    the register is associated with Qa, and the LSB with Qh.
- 
-    An instance attribute (shifter_bit_start) tracks the bit position
-    in the shift register where the 4 control bits for each motor
-    begin.
+    Stepper motor control using shift registers with multiprocessing queues.
+    Each motor has a dedicated process that listens to its queue and moves
+    to absolute angles.
     """
 
-    # Class attributes:
-    num_steppers = 0      # track number of Steppers instantiated
-    shifter_outputs = multiprocessing.Value('i', 0) # track shift register outputs
-    shifter_lock = multiprocessing.Lock() # mutex
-    seq = [0b0001,0b0011,0b0010,0b0110,0b0100,0b1100,0b1000,0b1001] # CCW sequence
-    delay = 2000          # delay between motor steps [us]
-    steps_per_degree = 1024/360    # 1024 steps/rev * 1/360 rev/deg
+    # Class attributes
+    num_steppers = 0
+    shifter_outputs = multiprocessing.Value('i', 0)
+    shifter_lock = multiprocessing.Lock()
+    seq = [0b0001,0b0011,0b0010,0b0110,0b0100,0b1100,0b1000,0b1001]
+    delay = 2000  # microseconds per step
+    steps_per_degree = 1024 / 360  # 1024 steps/rev
 
-    def __init__(self, shifter, lock):
-        self.s = shifter           # shift register
-        self.angle = multiprocessing.Value('d', 0.0)
-        self.step_state = 0        # track position in sequence
-        self.shifter_bit_start = 4*Stepper.num_steppers  # starting bit position
-        self.lock = lock           # multiprocessing lock
+    def __init__(self, shifter):
+        self.s = shifter
+        self.step_state = 0
+        self.shifter_bit_start = 4 * Stepper.num_steppers
+        self.angle = 0.0  # current absolute angle
+        self.queue = multiprocessing.Queue()
+        self.lock = multiprocessing.Lock()  # optional for internal thread safety
 
-        Stepper.num_steppers += 1   # increment the instance count
+        # Start the motor process
+        self.process = multiprocessing.Process(target=self._motor_loop)
+        self.process.daemon = True
+        self.process.start()
 
-    def __sgn(self, x):
-        if x == 0:
-            return 0
-        else:
-            return int(abs(x)/x)
+        Stepper.num_steppers += 1
 
-    # Move a single +/-1 step in the motor sequence:
-    def __step(self, dir):
-        self.step_state += dir
-        self.step_state %= 8
+    # Low-level step
+    def _step(self, dir):
+        self.step_state = (self.step_state + dir) % 8
         mask = ~(0b1111 << self.shifter_bit_start)
         command = Stepper.seq[self.step_state] << self.shifter_bit_start
+
+        # Ensure only one motor updates the shift register at a time
         with Stepper.shifter_lock:
             Stepper.shifter_outputs.value = (Stepper.shifter_outputs.value & mask) | command
             self.s.shiftByte(Stepper.shifter_outputs.value)
 
-        self.angle.value += dir / Stepper.steps_per_degree
-        self.angle.value %= 360
+        self.angle = (self.angle + dir / Stepper.steps_per_degree) % 360
 
-    # Move relative angle from current position:
-    def __rotate(self, delta):
-        with self.lock:
-            numSteps = int(Stepper.steps_per_degree * abs(delta))
-            dir = self.__sgn(delta)
-            for _ in range(numSteps):
-                self.__step(dir)
+    # Motor process loop
+    def _motor_loop(self):
+        while True:
+            target = self.queue.get()
+            if target is None:
+                break  # stop signal
+
+            # Compute shortest path delta
+            delta = target - self.angle
+            if delta > 180:
+                delta -= 360
+            elif delta < -180:
+                delta += 360
+
+            steps = int(abs(delta) * Stepper.steps_per_degree)
+            dir = 1 if delta > 0 else -1
+
+            for _ in range(steps):
+                self._step(dir)
                 time.sleep(Stepper.delay / 1e6)
 
-    # Move relative angle from current position (non-blocking):
-    def rotate(self, delta):
-        time.sleep(0.1)
-        p = multiprocessing.Process(target=self.__rotate, args=(delta,))
-        p.start()
-
-    # Move to an absolute angle taking the shortest path (blocking)
+    # Public method to move to absolute angle
     def goAngle(self, angle):
-        """
-        Move motor to absolute angle. Waits until the move finishes
-        to ensure correct delta computation.
-        """
-        delta = angle - self.angle.value
-        if delta > 180:
-            delta -= 360
-        elif delta < -180:
-            delta += 360
+        self.queue.put(angle)  # non-blocking, motor handles movement
 
-        # Start the process and wait until it finishes
-        p = multiprocessing.Process(target=self.__rotate, args=(delta,))
-        p.start()
-        p.join()  # <--- wait for motor to finish
-
-    # Set the motor zero point
+    # Public method to set zero
     def zero(self):
-        self.angle.value = 0
+        self.angle = 0.0
+
+    # Stop the motor process cleanly
+    def stop(self):
+        self.queue.put(None)
+        self.process.join()
 
 
 # Example use:
