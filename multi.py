@@ -61,7 +61,7 @@ class Stepper:
         mask = ~(0b1111 << self.shifter_bit_start) # erase selected motor bits
         command = Stepper.seq[self.step_state] << self.shifter_bit_start #  motor command
         with Stepper.shifter_lock: 
-            Stepper.shifter_outputs.value = (Stepper.shifter_outputs.value & mask) | command
+            Stepper.shifter_outputs.value = (Stepper.shifter_outputs.value & mask) | command # replace old command with new command
             self.s.shiftByte(Stepper.shifter_outputs.value)
 
         self.angle.value += dir/Stepper.steps_per_degree
