@@ -21,7 +21,7 @@ m2.zero()
     # Move as desired, with each step occuring as soon as the previous 
     # step ends:
 m1.goAngle(90)
-#m1.goAngle(0)
+m1.goAngle(0)
 #m2.goAngle(45)
 #m2.goAngle(90)
 
