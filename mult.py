@@ -21,6 +21,7 @@ class Stepper:
         self.shifter_bit_start = 4*Stepper.num_steppers
         self.lock = lock
         Stepper.num_steppers += 1
+        self.active_proc = None
 
     def __sgn(self, x):
         if x == 0: return 0
@@ -45,10 +46,12 @@ class Stepper:
                 self.__step(dir)
                 time.sleep(Stepper.delay/1e6)
 
+    # Replace your rotate() method:
     def rotate(self, delta):
-        # Launch in separate process for concurrency
-        p = multiprocessing.Process(target=self.__rotate, args=(delta,))
-        p.start()
+        if self.active_proc and self.active_proc.is_alive():
+            self.active_proc.join()
+        self.active_proc = multiprocessing.Process(target=self.__rotate, args=(delta,))
+        self.active_proc.start()
 
     # Move to an absolute angle via shortest path (robust version)
     def goAngle(self, a):
