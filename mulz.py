@@ -66,7 +66,23 @@ class Stepper:
  
         self.angle.value += dir/Stepper.steps_per_degree
         self.angle.value = self.angle.value % 360  # limit to [0, 360) range
-
+# Add this new private method. It will be the target for the goAngle process.
+    def __goAngle(self, target_angle):
+        # First, acquire the lock to wait for any other moves to finish
+        with self.lock:
+            # NOW we can safely read the *current* angle and calculate delta
+            delta = target_angle - self.angle.value
+            if delta > 180:
+                delta -= 360
+            elif delta < -180:
+                delta += 360
+            
+            # Now we just run the same logic as __rotate
+            numSteps = int(Stepper.steps_per_degree * abs(delta))
+            dir = self.__sgn(delta)
+            for s in range(numSteps):
+                self.__step(dir)
+                time.sleep(Stepper.delay/1e6)
 
     # Move relative angle from current position:
     def __rotate(self, delta):
@@ -82,16 +98,19 @@ class Stepper:
         time.sleep(0.1)
         p = multiprocessing.Process(target=self.__rotate, args=(delta,))
         p.start()
-
-    # Move to an absolute angle taking the shortest possible path:
+# Modify the public goAngle method to use __goAngle
     def goAngle(self, angle): # if going more than 180deg, go the other way
-         delta = angle - self.angle.value
-         if delta > 180:
-             delta -= 360
-         elif delta < -180:
-             delta += 360
-         self.rotate(delta)
-
+        # delta = angle - self.angle.value  # <<< OLD (THE BUG)
+        # if delta > 180:
+        #     delta -= 360
+        # elif delta < -180:
+        #     delta += 360
+        # self.rotate(delta)              # <<< OLD
+        
+        time.sleep(0.1) # Keep the sleep from rotate()
+        # Pass the TARGET ANGLE, not the delta, to the new process
+        p = multiprocessing.Process(target=self.__goAngle, args=(angle,)) # <<< NEW
+        p.start()
     # Set the motor zero point
     def zero(self):
         self.angle.value = 0
