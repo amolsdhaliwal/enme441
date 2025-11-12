@@ -29,7 +29,7 @@ class Stepper:
             return 0
         return int(abs(x) / x)
 
-    # Modified: accepts angle as parameter so shared Value can be updated
+    # accepts angle as parameter so shared Value can be updated
     def __step(self, dir, angle):
         self.step_state += dir
         self.step_state %= 8
@@ -43,7 +43,7 @@ class Stepper:
         angle.value += dir / Stepper.steps_per_degree
         angle.value %= 360
 
-    # Modified: passes self.angle to __step
+    # passes self.angle to __step
     def __rotate(self, delta, angle):
         with self.lock:
             numSteps = int(Stepper.steps_per_degree * abs(delta))
@@ -52,13 +52,13 @@ class Stepper:
                 self.__step(dir, angle)
                 time.sleep(Stepper.delay / 1e6)
 
-    # Modified: passes self.angle to subprocess explicitly
+    # now waits for process completion so angle updates correctly before next move
     def rotate(self, delta):
         time.sleep(0.1)
         p = multiprocessing.Process(target=self.__rotate, args=(delta, self.angle))
         p.start()
+        p.join()  # ensures next goAngle sees updated angle
 
-    # No change — will now correctly reference shared angle
     def goAngle(self, angle):
         delta = angle - self.angle.value
         if delta > 180:
@@ -85,11 +85,15 @@ if __name__ == '__main__':
     m1.zero()
     m2.zero()
 
-    # Move both simultaneously
+    # Your exact test sequence
     m1.goAngle(90)
+    m1.goAngle(-45)
+    m2.goAngle(-90)
+    m2.goAngle(45)
+    m1.goAngle(-135)
+    m1.goAngle(135)
     m1.goAngle(0)
 
-    # Keep main process alive
     try:
         while True:
             pass
