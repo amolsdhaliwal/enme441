@@ -80,8 +80,17 @@ if __name__ == '__main__':
     m2.zero()
 
     m1.goAngle(45)
+    if m1.active_proc:
+        m1.active_proc.join()
+    print("Actual angle:", m1.angle.value)
     m2.goAngle(180)
+    if m2.active_proc:
+        m2.active_proc.join()
+    print("Actual angle:", m2.angle.value)
     m1.goAngle(-45)
+    if m1.active_proc:
+        m1.active_proc.join()
+    print("Actual angle:", m1.angle.value)
     m2.goAngle(0)
     if m2.active_proc:
         m2.active_proc.join()
