@@ -87,6 +87,7 @@ if __name__ == '__main__':
     m2.zero()
 
     # Your exact test sequence
+    m1.goAngle(45)
     m1.goAngle(90)
     m1.goAngle(0)
 
