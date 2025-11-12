@@ -59,7 +59,6 @@ class Stepper:
         time.sleep(0.1)
         p = multiprocessing.Process(target=self.__rotate, args=(delta, self.angle))
         p.start()
-        p.join()  # ensures next goAngle sees updated angle
 
     def goAngle(self, angle):
         delta = angle - self.angle.value
