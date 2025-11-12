@@ -1,11 +1,7 @@
 import time
 import multiprocessing
 from shifter import Shifter   # your custom Shifter class
-import RPi.GPIO as GPIO
 
-GPIO.setwarnings(False)
-GPIO.setmode(GPIO.BCM)   # Use BCM numbering (matches your pin numbers)
-GPIO.cleanup()           # optional, clears any previous allocations
 
 
 class Stepper:
