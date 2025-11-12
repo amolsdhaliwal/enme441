@@ -77,8 +77,9 @@ if __name__ == '__main__':
     m2.zero()
 
     m1.goAngle(45)
-    m1.goAngle(90)
-    m1.goAngle(0)
+    m2.goAngle(100)
+    m1.goAngle(-45)
+    m2.goAngle(0)
 
 
     try:
