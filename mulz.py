@@ -84,33 +84,28 @@ class Stepper:
         self.process.join()
 
 
-# Example use:
+# Example usage
 if __name__ == '__main__':
     s = Shifter(data=16, clock=20, latch=21)
 
-    lock1 = multiprocessing.Lock()
-    lock2 = multiprocessing.Lock()
-
-    m1 = Stepper(s, lock1)
-    m2 = Stepper(s, lock2)
+    m1 = Stepper(s)
+    m2 = Stepper(s)
 
     # Zero the motors
     m1.zero()
     m2.zero()
 
-    # step ends:
+    # Move motors in parallel
     m1.goAngle(90)
-    m1.goAngle(-45)
     m2.goAngle(-90)
-    m2.goAngle(45)
-    m1.goAngle(-135)
-    m1.goAngle(135)
     m1.goAngle(0)
-  # now reliably moves back to zero
+    m2.goAngle(45)
 
-    # Keep the script running
+    # Keep the script running while motors move
     try:
         while True:
-            pass
-    except:
-        print("\nend")
+            time.sleep(0.1)
+    except KeyboardInterrupt:
+        print("Stopping motors...")
+        m1.stop()
+        m2.stop()
