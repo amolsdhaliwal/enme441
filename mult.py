@@ -21,7 +21,7 @@ class Stepper:
         self.shifter_bit_start = 4*Stepper.num_steppers
         self.lock = lock
         Stepper.num_steppers += 1
-        self.active_proc = None
+        self.active = None
 
     def __sgn(self, x):
         if x == 0: return 0
@@ -48,18 +48,13 @@ class Stepper:
 
     # Replace your rotate() method:
     def rotate(self, delta):
-        if self.active_proc and self.active_proc.is_alive():
-            self.active_proc.join()
-        self.active_proc = multiprocessing.Process(target=self.__rotate, args=(delta,))
-        self.active_proc.start()
+        if self.active and self.active.is_alive():
+            self.active.join()
+        self.active = multiprocessing.Process(target=self.__rotate, args=(delta,))
+        self.active.start()
 
     # Move to an absolute angle via shortest path (robust version)
     def goAngle(self, angle):
-     #   with self.angle.get_lock():
-       #     curr = self.angle.value
-        # Compute shortest path delta (takes care of -180°/+180° wraparound)
-       # delta = ((a - curr + 180) % 360) - 180
-       # self.rotate(delta)
         delta = angle - self.angle.value
         if delta > 180:
             delta -= 360
@@ -88,20 +83,20 @@ if __name__ == '__main__':
     m1.goAngle(45)
 
     m2.goAngle(180)
-    if m1.active_proc:
-        m1.active_proc.join()
-    print("Actual angle:", m1.angle.value)
-    if m2.active_proc:
-        m2.active_proc.join()
-    print("Actual angle:", m2.angle.value)
+ #   if m1.active:
+  #      m1.active.join()
+   # print("Actual angle:", m1.angle.value)
+    #if m2.active:
+     #   m2.active.join()
+    #print("Actual angle:", m2.angle.value)
     m1.goAngle(-45)
 
     m2.goAngle(0)
-    if m1.active_proc:
-        m1.active_proc.join()
+    if m1.active:
+        m1.active.join()
     print("Actual angle:", m1.angle.value)
-    if m2.active_proc:
-        m2.active_proc.join()
+    if m2.active:
+        m2.active.join()
     print("Actual angle:", m2.angle.value)
 
 
