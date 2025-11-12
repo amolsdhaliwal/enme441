@@ -41,7 +41,7 @@ class Stepper:
     def __init__(self, shifter, lock):
         self.s = shifter           # shift register
         self.angle = multiprocessing.Value('d', 0.0)
-        self.step_state = 0        # track position in sequence
+        self.step_state = multiprocessing.Value('i', 0) # <<< NEW
         self.shifter_bit_start = 4*Stepper.num_steppers  # starting bit position
         self.lock = lock           # multiprocessing lock
 
@@ -51,18 +51,22 @@ class Stepper:
         if x == 0: return(0)
         else: return(int(abs(x)/x))
 
-    # Move a single +/-1 step in the motor sequence:
+    # In __step__:
     def __step(self, dir):
-        self.step_state += dir    # increment/decrement the step
-        self.step_state %= 8      # ensure result stays in [0,7]
+        # self.step_state += dir     # <<< OLD
+        # self.step_state %= 8       # <<< OLD
+        self.step_state.value += dir # <<< NEW
+        self.step_state.value %= 8   # <<< NEW
         mask = ~(0b1111 << self.shifter_bit_start) # erase selected motor bits
-        command = Stepper.seq[self.step_state] << self.shifter_bit_start #  motor command
-        with Stepper.shifter_lock: 
+        # command = Stepper.seq[self.step_state] << self.shifter_bit_start # <<< OLD
+        command = Stepper.seq[self.step_state.value] << self.shifter_bit_start # <<< NEW
+        with Stepper.shifter_lock:  
             Stepper.shifter_outputs.value = (Stepper.shifter_outputs.value & mask) | command # replace old command with new command
             self.s.shiftByte(Stepper.shifter_outputs.value)
-
+ 
         self.angle.value += dir/Stepper.steps_per_degree
         self.angle.value = self.angle.value % 360  # limit to [0, 360) range
+
 
     # Move relative angle from current position:
     def __rotate(self, delta):
@@ -115,11 +119,6 @@ if __name__ == '__main__':
     # Move as desired, with each step occuring as soon as the previous 
     # step ends:
     m1.goAngle(90)
-    m1.goAngle(-45)
-    m2.goAngle(-90)
-    m2.goAngle(45)
-    m1.goAngle(-135)
-    m1.goAngle(135)
     m1.goAngle(0)
 
     # While the motors are running in their separate processes, the main
