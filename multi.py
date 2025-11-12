@@ -60,8 +60,7 @@ class Stepper:
         self.step_state %= 8      # ensure result stays in [0,7]
         mask = ~(0b1111 << self.shifter_bit_start) # erase selected motor bits
         command = Stepper.seq[self.step_state] << self.shifter_bit_start #  motor command
-        with Stepper.shifter_lock: # yada
-# maybe move mask back here?
+        with Stepper.shifter_lock: 
             Stepper.shifter_outputs.value = (Stepper.shifter_outputs.value & mask) | command
             self.s.shiftByte(Stepper.shifter_outputs.value)
 
@@ -108,32 +107,16 @@ if __name__ == '__main__':
     lock1 = multiprocessing.Lock()
     lock2 = multiprocessing.Lock()
 
-    # Instantiate 2 Steppers with their own locks:
-    # m2 (bits 4-7) must be instantiated *after* m1 (bits 0-3)
-    # as per the logic: self.shifter_bit_start = 4*Stepper.num_steppers
-    
-    # Wait, re-reading your working code:
-    # MASK_A = 0b1111 << 4   (bits 4-7)
-    # MASK_B = 0b1111         (bits 0-3)
-    # This means your "Motor A" uses bits 4-7 and "Motor B" uses bits 0-3.
-    
-    # In my class code:
-    # m1 = Stepper() -> self.shifter_bit_start = 0 (bits 0-3) -> This is Motor B
-    # m2 = Stepper() -> self.shifter_bit_start = 4 (bits 4-7) -> This is Motor A
-    
-    # This is correct. m1 is B, m2 is A.
-    
-    m1 = Stepper(s, lock1) # Corresponds to Motor B (bits 0-3 / Qe-Qh)
-    m2 = Stepper(s, lock2) # Corresponds to Motor A (bits 4-7 / Qa-Qd)
-
-
-    # LAB 8 (Step 4): Demonstrate the required sequence
+    # Instantiate 2 Steppers:
+    m1 = Stepper(s, lock1) 
+    m2 = Stepper(s, lock2) 
     
     # Zero the motors:
     m1.zero()
     m2.zero()
 
-    print("Starting motor commands...")
+    # Move as desired, with each step occuring as soon as the previous 
+    # step ends:
     m1.goAngle(90)
     m1.goAngle(-45)
     m2.goAngle(-90)
@@ -141,11 +124,11 @@ if __name__ == '__main__':
     m1.goAngle(-135)
     m1.goAngle(135)
     m1.goAngle(0)
-    print("All commands issued.")
- 
+
+    # While the motors are running in their separate processes, the main
+    # code can continue doing its thing: 
     try:
-        print("Main process is waiting... (Press Ctrl+C to exit)")
         while True:
             pass
-    except KeyboardInterrupt:
-        print('\nProgram terminated.')
+    except:
+        print('\nend')
