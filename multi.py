@@ -55,7 +55,7 @@ class Stepper:
     def __step(self, dir):
         self.step_state += dir    # increment/decrement the step
         self.step_state %= 8      # ensure result stays in [0,7]
-        mask = ~(0b1111 << self.shifter_bit_start) # erase selected motor bits
+        mask = ~(0b1111 << self.shifter_bit_start) # erase motor bits
         command = Stepper.seq[self.step_state] << self.shifter_bit_start #  motor command
         with Stepper.shifter_lock: 
             Stepper.shifter_outputs.value = (Stepper.shifter_outputs.value & mask) | command # replace old command with new command
@@ -66,7 +66,7 @@ class Stepper:
 
     # Move relative angle from current position:
     def __rotate(self, delta):
-        with self.lock:
+        with self.lock: # wait until lock is available
             numSteps = int(Stepper.steps_per_degree * abs(delta)) # find the right # of steps
             dir = self.__sgn(delta)        # find the direction (+/-1)
             for s in range(numSteps):      # take the steps
