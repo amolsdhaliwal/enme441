@@ -1,3 +1,4 @@
+#LED on GPIO bcm pin 17
 import time
 import multiprocessing
 from shifter import Shifter   # your custom Shifter class
