@@ -14,16 +14,27 @@ lock2 = multiprocessing.Lock()
 m1 = Stepper(s, lock1) 
 m2 = Stepper(s, lock2) 
     
- # Zero the motors:
-m1.zero()
-m2.zero()
-
-    # Move as desired, with each step occuring as soon as the previous 
-    # step ends:
+    # Example input sequence
 m1.goAngle(90)
+m2.goAngle(-90)  # starts simultaneously with m1
+m1.wait()
+m2.wait()
+
+m1.goAngle(-45)
+m2.goAngle(45)
+m1.wait()
+m2.wait()
+
+m1.goAngle(-135)
+m1.wait()
+m1.goAngle(135)
+m1.wait()
 m1.goAngle(0)
-#m2.goAngle(45)
-#m2.goAngle(90)
+m1.wait()
+
+print("Final angles:")
+print("Motor 1:", m1.angle.value)
+print("Motor 2:", m2.angle.value)
 
     # While the motors are running in their separate processes, the main
     # code can continue doing its thing: 
