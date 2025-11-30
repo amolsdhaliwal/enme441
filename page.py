@@ -22,7 +22,6 @@ POSITIONS_URL = "http://192.168.1.254:8000/positions.json"
 TEAM_ID = "1"   # change this to your team ID
 
 
-# === HTML Web Page ===
 def web_page(az, el, positions_text=""):
     html = """
     <html><head><title>Turret Control</title>
@@ -49,13 +48,17 @@ def web_page(az, el, positions_text=""):
 
     <form action="/" method="POST">
         <input type="hidden" name="motor" value="az">
-        Set Azimuth (deg): <input type="text" name="angle">
+        <label>Set Azimuth (deg):
+            <input type="range" name="angle" min="-180" max="180" step="1">
+        </label>
         <button type="submit" class="button">Move</button>
     </form>
 
     <form action="/" method="POST">
         <input type="hidden" name="motor" value="el">
-        Set Elevation (deg): <input type="text" name="angle">
+        <label>Set Elevation (deg):
+            <input type="range" name="angle" min="-90" max="90" step="1">
+        </label>
         <button type="submit" class="button">Move</button>
     </form>
 
@@ -77,6 +80,8 @@ def web_page(az, el, positions_text=""):
     </body></html>
     """
     return html.encode("utf-8")
+
+
 
 
 # === Helper: Parse POST ===
