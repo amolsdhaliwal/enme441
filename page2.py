@@ -1,4 +1,3 @@
-# just testing code for concurrent movement command
 import socket
 import threading
 import requests
@@ -26,9 +25,7 @@ TEAM_ID = "1"
 
 
 ### --- HTML Page --- ###
-def web_page(az, el, led_is_on, positions=""):
-    state_str = "ON" if led_is_on else "OFF"
-
+def web_page(positions=""):
     html = """
     <html><head><title>Turret Control</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -43,22 +40,18 @@ def web_page(az, el, led_is_on, positions=""):
 
     <h1>Laser Turret Control</h1>
 
-    <h2>Current Angles</h2>
-    <p>Azimuth: """ + str(az) + """&deg;</p>
-    <p>Elevation: """ + str(el) + """&deg;</p>
-
     <h2>Set Azimuth & Elevation</h2>
     <form method="POST">
         <label>Azimuth (deg):
-            <input type="number" name="az_angle" min="-180" max="180" step="1">
+            <input type="number" name="az_angle" step="1">
         </label><br>
         <label>Elevation (deg):
-            <input type="number" name="el_angle" min="-90" max="90" step="1">
+            <input type="number" name="el_angle" step="1">
         </label><br><br>
         <button class="button" type="submit" name="move_both" value="1">Move Both</button>
     </form>
 
-    <h2>LED: """ + state_str + """</h2>
+    <h2>LED</h2>
     <form method="POST">
         <button class="button button2" type="submit" name="led" value="toggle">
             Toggle LED
@@ -97,14 +90,11 @@ def serve_web_page():
     while True:
         conn, addr = s.accept()
         msg = conn.recv(4096).decode("utf-8")
-        print("Client from:", addr)
-        print("Raw request:\n", msg)
 
         positions_text = ""
 
         if "POST" in msg:
             data = parsePOST(msg)
-            print("Parsed POST:", data)
 
             # Move both angles (if requested)
             if "move_both" in data:
@@ -112,7 +102,6 @@ def serve_web_page():
                 if "az_angle" in data and data["az_angle"] != "":
                     try:
                         az_target = float(data["az_angle"])
-                        print("Moving AZ to", az_target)
                         m1.goAngle(az_target)
                     except Exception as e:
                         print("AZ move error:", e)
@@ -121,7 +110,6 @@ def serve_web_page():
                 if "el_angle" in data and data["el_angle"] != "":
                     try:
                         el_target = float(data["el_angle"])
-                        print("Moving EL to", el_target)
                         m2.goAngle(el_target)
                     except Exception as e:
                         print("EL move error:", e)
@@ -144,18 +132,12 @@ def serve_web_page():
                 except Exception as e:
                     positions_text = "Error loading file: " + str(e)
 
-        # Current states
-        az = round(m1.angle.value, 2)
-        el = round(m2.angle.value, 2)
-        with led_state.get_lock():
-            led_is_on = (led_state.value == 1)
-
         # Respond (with BrokenPipe protection)
         try:
             conn.send(b"HTTP/1.1 200 OK\r\n")
             conn.send(b"Content-Type: text/html\r\n")
             conn.send(b"Connection: close\r\n\r\n")
-            conn.sendall(web_page(az, el, led_is_on, positions_text))
+            conn.sendall(web_page(positions_text))
         except BrokenPipeError:
             print("Client disconnected before response was sent")
         finally:
@@ -167,7 +149,7 @@ def serve_web_page():
 
 ### --- Start Web Server --- ###
 s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-s.bind(("", 8080))   # use 80 if you want default HTTP and no other service is using it
+s.bind(("", 8080))   # Change to 80 if needed
 s.listen(3)
 
 t = threading.Thread(target=serve_web_page)
