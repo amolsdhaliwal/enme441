@@ -2,6 +2,11 @@
 import time
 import multiprocessing
 from shifter import Shifter   # your custom Shifter class
+import RPi.GPIO as gpio
+
+gpio.setmode(gpio.BCM)
+gpio.setup(17,gpio.OUT)
+gpio.output(17,0)
 
 class Stepper:
     """
@@ -80,6 +85,15 @@ class Stepper:
         """Block until current movement finishes."""
         if self.active is not None:
             self.active.join()
+
+    def led_on():
+        gpio.output(17,1)
+
+    def led_off():
+        gpio.output(17,0)
+
+    def led_state():
+        return gpio.input(17)
 
 
 # === Example use ===
