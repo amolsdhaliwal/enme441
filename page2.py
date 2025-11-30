@@ -51,6 +51,12 @@ def web_page(positions=""):
         <button class="button" type="submit" name="move_both" value="1">Move Both</button>
     </form>
 
+    <h2>Set Zero</h2>
+    <form method="POST">
+        <button class="button" type="submit" name="set_zero" value="az">Set Azimuth Zero</button>
+        <button class="button" type="submit" name="set_zero" value="el">Set Elevation Zero</button>
+    </form>
+
     <h2>LED</h2>
     <form method="POST">
         <button class="button button2" type="submit" name="led" value="toggle">
@@ -113,6 +119,15 @@ def serve_web_page():
                         m2.goAngle(el_target)
                     except Exception as e:
                         print("EL move error:", e)
+
+            # Set zero for a motor
+            if "set_zero" in data:
+                if data["set_zero"] == "az":
+                    m1.zero()
+                    print("Azimuth zero set")
+                elif data["set_zero"] == "el":
+                    m2.zero()
+                    print("Elevation zero set")
 
             # LED toggle
             if "led" in data and data["led"] == "toggle":
