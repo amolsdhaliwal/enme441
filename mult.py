@@ -12,12 +12,12 @@ led_state = False
 
 def led_on():
     global led_state
-    GPIO.output(LED_PIN, 1)
+    gpio.output(17, 1)
     led_state = True
 
 def led_off():
     global led_state
-    GPIO.output(LED_PIN, 0)
+    gpio.output(17, 0)
     led_state = False
 
 class Stepper:
