@@ -8,17 +8,18 @@ gpio.setmode(gpio.BCM)
 gpio.setup(17,gpio.OUT)
 gpio.output(17,0)
 
-led_state = False
+led_state = multiprocessing.Value('i', 0)
 
 def led_on():
-    global led_state
     gpio.output(17, 1)
-    led_state = True
+    with led_state.get_lock():
+        led_state.value = 1
 
 def led_off():
-    global led_state
     gpio.output(17, 0)
-    led_state = False
+    with led_state.get_lock():
+        led_state.value = 0
+
 
 class Stepper:
     """
