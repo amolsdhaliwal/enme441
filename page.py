@@ -124,11 +124,19 @@ def serve_web_page():
                 except Exception as e:
                     print("Error parsing angle or moving motor:", e)
 
-            # --- LED toggle (no state tracking here) ---
+            # --- LED toggle using shared led_state ---
             if "led" in data and data["led"] == "toggle":
-                led_on()
-                time.sleep(0.2)  # brief pulse
-                led_off()
+                # read current state atomically
+                with led_state.get_lock():
+                    current = led_state.value
+
+                    if current == 0:
+                        # currently OFF -> turn ON
+                        led_on()
+                    else:
+                        # currently ON -> turn OFF
+                        led_off()
+
 
             # --- Load positions.json ---
             if "get_positions" in data:
