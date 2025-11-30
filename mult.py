@@ -8,6 +8,18 @@ gpio.setmode(gpio.BCM)
 gpio.setup(17,gpio.OUT)
 gpio.output(17,0)
 
+led_state = False
+
+def led_on():
+    global led_state
+    GPIO.output(LED_PIN, 1)
+    led_state = True
+
+def led_off():
+    global led_state
+    GPIO.output(LED_PIN, 0)
+    led_state = False
+
 class Stepper:
     """
     Supports operation of multiple stepper motors using shift registers,
@@ -86,14 +98,6 @@ class Stepper:
         if self.active is not None:
             self.active.join()
 
-    def led_on():
-        gpio.output(17,1)
-
-    def led_off():
-        gpio.output(17,0)
-
-    def led_state():
-        return gpio.input(17)
 
 
 # === Example use ===
