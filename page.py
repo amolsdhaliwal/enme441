@@ -2,23 +2,28 @@ import socket
 import threading
 import requests
 import json
+import multiprocessing
+import time
 
-from mult import Stepper, led_on, led_off, led_state  # import your LED functions
+from mult import Stepper, led_on, led_off, led_state
 from shifter import Shifter
 
 # === Hardware Setup ===
 dataPin, latchPin, clockPin = 16, 21, 20
 sh = Shifter(dataPin, latchPin, clockPin)
 
-m1 = Stepper(sh, None)  # azimuth
-m2 = Stepper(sh, None)  # elevation
+lock1 = multiprocessing.Lock()
+lock2 = multiprocessing.Lock()
+
+m1 = Stepper(sh, lock1)  # azimuth
+m2 = Stepper(sh, lock2)  # elevation
 
 POSITIONS_URL = "http://192.168.1.254:8000/positions.json"
 TEAM_ID = "1"   # change this to your team ID
 
 
 # === HTML Web Page ===
-def web_page(az, el, led_state, positions_text=""):
+def web_page(az, el, positions_text=""):
     html = """
     <html><head><title>Turret Control</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -39,7 +44,6 @@ def web_page(az, el, led_state, positions_text=""):
     <h2>Current Values</h2>
     <p>Azimuth: <strong>""" + str(az) + """°</strong></p>
     <p>Elevation: <strong>""" + str(el) + """°</strong></p>
-    <p>LED State: <strong>""" + ("ON" if led_state else "OFF") + """</strong></p>
 
     <h2>Move Motors</h2>
 
@@ -57,8 +61,9 @@ def web_page(az, el, led_state, positions_text=""):
 
     <h2>LED Control</h2>
     <form action="/" method="POST">
-        <button class="button" type="submit" name="led" value="on">LED ON</button>
-        <button class="button button2" type="submit" name="led" value="off">LED OFF</button>
+        <button class="button button2" type="submit" name="led" value="toggle">
+            Toggle LED
+        </button>
     </form>
 
     <h2>Read positions.json</h2>
@@ -74,7 +79,7 @@ def web_page(az, el, led_state, positions_text=""):
     return html.encode("utf-8")
 
 
-# === Helper: Parse POST exactly like your professor ===
+# === Helper: Parse POST ===
 def parsePOSTdata(data):
     data_dict = {}
     idx = data.find("\r\n\r\n") + 4
@@ -102,24 +107,28 @@ def serve_web_page():
         # Parse POST data
         if "POST" in msg:
             data = parsePOSTdata(msg)
+            print("Parsed POST data:", data)
 
             # --- Motor control ---
             if "motor" in data and "angle" in data:
                 try:
-                    angle = float(data["angle"])
+                    # basic handling if browser encodes spaces as '+'
+                    raw_angle = data["angle"].replace("+", " ")
+                    angle = float(raw_angle)
+                    print(f"Moving motor {data['motor']} to {angle} degrees")
+
                     if data["motor"] == "az":
                         m1.goAngle(angle)
                     elif data["motor"] == "el":
                         m2.goAngle(angle)
-                except:
-                    pass
+                except Exception as e:
+                    print("Error parsing angle or moving motor:", e)
 
-            # --- LED control ---
-            if "led" in data:
-                if data["led"] == "on":
-                    led_on()
-                if data["led"] == "off":
-                    led_off()
+            # --- LED toggle (no state tracking here) ---
+            if "led" in data and data["led"] == "toggle":
+                led_on()
+                time.sleep(0.2)  # brief pulse
+                led_off()
 
             # --- Load positions.json ---
             if "get_positions" in data:
@@ -139,7 +148,7 @@ def serve_web_page():
         conn.send(b"HTTP/1.1 200 OK\r\n")
         conn.send(b"Content-Type: text/html\r\n")
         conn.send(b"Connection: close\r\n\r\n")
-        conn.sendall(web_page(az, el, led_state, positions_text))
+        conn.sendall(web_page(az, el, positions_text))
         conn.close()
 
 
