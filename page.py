@@ -41,14 +41,14 @@ def web_page(az, el, led_is_on, positions=""):
 
     <h1>Laser Turret Control</h1>
 
-    <h2>Azimuth: """ + str(az) + """°</h2>
+    <h2>Azimuth:</h2>
     <form method="POST">
         <input type="hidden" name="motor" value="az">
         <input type="text" name="angle">
         <button class="button" type="submit">Move</button>
     </form>
 
-    <h2>Elevation: """ + str(el) + """°</h2>
+    <h2>Elevation:</h2>
     <form method="POST">
         <input type="hidden" name="motor" value="el">
         <input type="text" name="angle">
