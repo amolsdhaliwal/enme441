@@ -1,198 +1,138 @@
-import socket
-import threading
-import requests
-import json
-import time
-
-from mult import Stepper, led_on, led_off, led_state
-from shifter import Shifter
 import multiprocessing
 
-# === Hardware Setup ===
-dataPin, latchPin, clockPin = 16, 21, 20
-sh = Shifter(dataPin, latchPin, clockPin)
+def start_server():
+    import socket
+    import threading
+    import requests
+    import json
+    import time
 
-lock1 = multiprocessing.Lock()
-lock2 = multiprocessing.Lock()
+    from mult import Stepper, led_on, led_off, led_state
+    from shifter import Shifter
 
-m1 = Stepper(sh, lock1)  # azimuth
-m2 = Stepper(sh, lock2)  # elevation
+    # === Hardware Setup ===
+    dataPin, latchPin, clockPin = 16, 21, 20
+    sh = Shifter(dataPin, latchPin, clockPin)
 
-POSITIONS_URL = "http://192.168.1.254:8000/positions.json"
-TEAM_ID = "1"   # change for your group
+    lock1 = multiprocessing.Lock()
+    lock2 = multiprocessing.Lock()
 
+    m1 = Stepper(sh, lock1)  # azimuth
+    m2 = Stepper(sh, lock2)  # elevation
 
-# ----------------------------------------------------
-#  HTML PAGE
-# ----------------------------------------------------
-def web_page(az, el, led, positions_text=""):
-    html = """
-    <html><head><title>Turret Control</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1">
+    POSITIONS_URL = "http://192.168.1.254:8000/positions.json"
+    TEAM_ID = "1"
 
-    <style>
-    html{font-family: Helvetica; text-align:center;}
-    h1{color:#0F3376;}
-    .button{background-color:#e7bd3b; border:none; padding:10px 30px;
-            color:white; font-size:22px; border-radius:4px; margin:8px;}
-    .button2{background-color:#4286f4;}
-    input{font-size:20px; padding:6px; margin:6px;}
-    pre{text-align:left; border:1px solid #ddd; padding:10px; width:80%; margin:auto;}
-    </style>
+    # === HTML PAGE ===
+    def web_page(az, el, led, positions_text=""):
+        html = """
+        <html><head><title>Turret Control</title>
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        </head><body>
 
-    </head>
-    <body>
+        <h1>Turret Control</h1>
 
-    <h1>Laser Turret Control</h1>
+        <p>Azimuth: <b>""" + str(az) + """°</b></p>
+        <p>Elevation: <b>""" + str(el) + """°</b></p>
+        <p>LED State: <b>""" + ("ON" if led else "OFF") + """</b></p>
 
-    <h2>Current Values</h2>
-    <p>Azimuth: <strong>""" + str(az) + """°</strong></p>
-    <p>Elevation: <strong>""" + str(el) + """°</strong></p>
-    <p>LED State: <strong>""" + ("ON" if led else "OFF") + """</strong></p>
+        <h2>Move Azimuth</h2>
+        <form action="/" method="POST">
+            <input type="hidden" name="motor" value="az">
+            <input type="number" name="angle">
+            <button type="submit">Move</button>
+        </form>
 
-    <h2>Move Motors</h2>
+        <h2>Move Elevation</h2>
+        <form action="/" method="POST">
+            <input type="hidden" name="motor" value="el">
+            <input type="number" name="angle">
+            <button type="submit">Move</button>
+        </form>
 
-    <form action="/" method="POST">
-        <input type="hidden" name="motor" value="az">
-        <label>Set Azimuth:
-            <input type="number" name="angle" min="-180" max="180" step="1">
-        </label>
-        <button type="submit" class="button">Move</button>
-    </form>
+        <h2>LED</h2>
+        <form action="/" method="POST">
+            <button type="submit" name="led" value="toggle">Toggle LED</button>
+        </form>
 
-    <form action="/" method="POST">
-        <input type="hidden" name="motor" value="el">
-        <label>Set Elevation:
-            <input type="number" name="angle" min="-90" max="90" step="1">
-        </label>
-        <button type="submit" class="button">Move</button>
-    </form>
+        <h2>Positions.json</h2>
+        <form action="/" method="POST">
+            <button type="submit" name="get_positions" value="1">Load</button>
+        </form>
 
-    <h2>LED Control</h2>
-    <form action="/" method="POST">
-        <button class="button button2" type="submit" name="led" value="toggle">
-            Toggle LED
-        </button>
-    </form>
+        <pre>""" + positions_text + """</pre>
 
-    <h2>Read positions.json</h2>
-    <form action="/" method="POST">
-        <input type="hidden" name="get_positions" value="1">
-        <button type="submit" class="button">Load positions.json</button>
-    </form>
+        </body></html>
+        """
+        return html.encode()
 
-    <pre>""" + positions_text + """</pre>
+    # Parse POST
+    def parsePOSTdata(msg):
+        out = {}
+        idx = msg.find("\r\n\r\n") + 4
+        body = msg[idx:]
+        for pair in body.split("&"):
+            if "=" in pair:
+                k, v = pair.split("=")
+                out[k] = v
+        return out
 
-    </body></html>
-    """
-    return html.encode("utf-8")
+    # Web server thread
+    def serve_web_page():
+        while True:
+            conn, addr = s.accept()
+            msg = conn.recv(4096).decode()
+            data = parsePOSTdata(msg)
+            positions_text = ""
 
-
-
-# ----------------------------------------------------
-#  POST PARSER (matches professor’s format)
-# ----------------------------------------------------
-def parsePOSTdata(msg):
-    data = {}
-    idx = msg.find("\r\n\r\n") + 4
-    body = msg[idx:]
-    pairs = body.split("&")
-    for pair in pairs:
-        kv = pair.split("=")
-        if len(kv) == 2:
-            data[kv[0]] = kv[1]
-    return data
-
-
-
-# ----------------------------------------------------
-#  MAIN SERVER THREAD
-# ----------------------------------------------------
-def serve_web_page():
-    while True:
-        conn, (client_ip, client_port) = s.accept()
-        print(f"\nConnection from {client_ip}:{client_port}")
-
-        request = conn.recv(4096).decode("utf-8")
-        print("Request:\n", request)
-
-        # default text
-        positions_text = ""
-
-        if "POST" in request:
-            data = parsePOSTdata(request)
-            print("Parsed:", data)
-
-            # -----------------------------------------------
-            # Move motors (non-blocking, multiprocessing!)
-            # -----------------------------------------------
+            # === Motor movement ===
             if "motor" in data and "angle" in data:
-                try:
-                    angle = float(data["angle"].replace("+",""))
-                    if data["motor"] == "az":
-                        m1.goAngle(angle)
-                    elif data["motor"] == "el":
-                        m2.goAngle(angle)
-                except:
-                    print("Invalid angle POST data")
+                angle = float(data["angle"])
+                if data["motor"] == "az":
+                    m1.goAngle(angle)
+                else:
+                    m2.goAngle(angle)
 
-            # -----------------------------------------------
-            # LED toggle
-            # -----------------------------------------------
-            if data.get("led") == "toggle":
+            # === LED toggle ===
+            if "led" in data:
                 with led_state.get_lock():
                     if led_state.value == 0:
                         led_on()
                     else:
                         led_off()
 
-            # -----------------------------------------------
-            # Read positions.json
-            # -----------------------------------------------
+            # === JSON load ===
             if "get_positions" in data:
                 try:
-                    r = requests.get(POSITIONS_URL, timeout=2)
-                    j = r.json()
-                    my_pos = j["turrets"].get(TEAM_ID, "Not found")
-                    positions_text = json.dumps(my_pos, indent=2)
-                except Exception as e:
-                    positions_text = "Error: " + str(e)
+                    j = requests.get(POSITIONS_URL).json()
+                    my = j["turrets"].get(TEAM_ID, "Not found")
+                    positions_text = json.dumps(my, indent=2)
+                except:
+                    positions_text = "Error loading positions."
 
-        # --------------------------------------------
-        # Send response
-        # --------------------------------------------
-        az = round(m1.angle.value, 2)
-        el = round(m2.angle.value, 2)
-
-        with led_state.get_lock():
+            # Updated values
+            az = round(m1.angle.value, 2)
+            el = round(m2.angle.value, 2)
             led = led_state.value
 
-        html = web_page(az, el, led, positions_text)
+            conn.send(b"HTTP/1.1 200 OK\r\n")
+            conn.send(b"Content-Type: text/html\r\n\r\n")
+            conn.sendall(web_page(az, el, led, positions_text))
+            conn.close()
 
-        conn.send(b"HTTP/1.1 200 OK\r\n")
-        conn.send(b"Content-Type: text/html\r\n")
-        conn.send(b"Connection: close\r\n\r\n")
-        conn.sendall(html)
+    # Start socket
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    s.bind(("", 8080))       # <-- use 8080 to avoid permission denied
+    s.listen(3)
 
-        conn.close()
+    threading.Thread(target=serve_web_page, daemon=True).start()
+    print("Web server running on port 8080...")
 
-
-
-# ----------------------------------------------------
-#  SERVER INITIALIZATION
-# ----------------------------------------------------
-s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-s.bind(("", 80))   # requires sudo
-s.listen(3)
-
-thread = threading.Thread(target=serve_web_page)
-thread.daemon = True
-thread.start()
-
-print("Webserver running on http://<your-pi-ip>/ ...")
-
-try:
     while True:
         time.sleep(1)
-except:
-    s.close()
+
+
+# === REQUIRED MULTIPROCESSING STARTUP ===
+if __name__ == "__main__":
+    multiprocessing.set_start_method("fork")
+    start_server()
