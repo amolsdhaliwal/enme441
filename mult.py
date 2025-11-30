@@ -5,20 +5,22 @@ from shifter import Shifter   # your custom Shifter class
 import RPi.GPIO as gpio
 
 gpio.setmode(gpio.BCM)
-gpio.setup(17,gpio.OUT)
-gpio.output(17,0)
+LED_PIN = 17
+gpio.setup(LED_PIN, gpio.OUT)
+gpio.output(LED_PIN, 0)
 
+# multiprocessing-friendly LED state
 led_state = multiprocessing.Value('i', 0)
 
 def led_on():
-    gpio.output(17, 1)
     with led_state.get_lock():
         led_state.value = 1
+    gpio.output(LED_PIN, 1)
 
 def led_off():
-    gpio.output(17, 0)
     with led_state.get_lock():
         led_state.value = 0
+    gpio.output(LED_PIN, 0)
 
 
 class Stepper:
