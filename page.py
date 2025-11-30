@@ -142,14 +142,14 @@ def serve_web_page():
 
 ### --- Start Web Server --- ###
 s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-s.bind(("", 8080))     # <---- NO SUDO REQUIRED
+s.bind(("", 80))
 s.listen(3)
 
 t = threading.Thread(target=serve_web_page)
 t.daemon = True
 t.start()
 
-print("Open page at:  http://<your_pi_ip>:8080")
+print("Open page at:  http://<your_pi_ip>")
 
 while True:
     pass
