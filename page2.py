@@ -39,10 +39,10 @@ def web_page(positions=""):
 
     <h2>Set Azimuth & Elevation</h2>
     <form method="POST">
-        <label>Azimuth (deg):
+        <label>Azimuth (theta) (deg):
             <input type="number" name="theta" step="1">
         </label><br>
-        <label>Elevation (deg):
+        <label>Elevation (z) (deg):
             <input type="number" name="z" step="1">
         </label><br><br>
         <button class="button" type="submit" name="move" value="1">Move</button>
