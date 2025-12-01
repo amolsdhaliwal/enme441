@@ -138,7 +138,6 @@ def serve_web_page():
                         led_off()
 
             # Read positions.json
-
             if "get_positions" in data:
                 try:
                     #r = requests.get(POSITIONS_URL, timeout=2)
@@ -154,44 +153,13 @@ def serve_web_page():
                             {"r": 300.0, "theta": 4.512, "z": 32.0},
                             {"r": 300.0, "theta": 3.979, "z": 10.8}
                         ]
-                    }
-        # Get your team's position
-                    my_pos = j["turrets"].get(TEAM_ID, "Not found")
+                    
 
-        # Get all globe positions
-                    globe_list = j.get("globes", [])
-
-        # Format output (show both your turret and globes)
-                    positions_text = json.dumps({
-                        "my_turret": my_pos,
-                        "globes": globe_list
-                    }, indent=2)
+                    # Format all locations for display
+                    positions_text = json.dumps(j, indent=2)
                 except Exception as e:
                     positions_text = "Error loading file: " + str(e)
 
-            '''if "get_positions" in data:
-                try:
-                    #r = requests.get(POSITIONS_URL, timeout=2)
-                    #j = r.json()
-                    # Mock JSON response
-                    j = {
-                        "turrets": {
-                            "1": {"r": 300.0, "theta": 2.580},
-                            "2": {"r": 300.0, "theta": 0.661},
-                            "3": {"r": 300.0, "theta": 5.152}
-                        },
-                        "globes": [
-                            {"r": 300.0, "theta": 1.015, "z": 20.4},
-                            {"r": 300.0, "theta": 4.512, "z": 32.0},
-                            {"r": 300.0, "theta": 3.979, "z": 10.8}
-                        ]
-                    }
-
-
-                    mine = j["turrets"].get(TEAM_ID, "Not found")
-                    positions_text = json.dumps(mine, indent=2)
-                except Exception as e:
-                    positions_text = "Error loading file: " + str(e)'''
 
         # Respond (with BrokenPipe protection)
         try:
