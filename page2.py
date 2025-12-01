@@ -7,24 +7,21 @@ import multiprocessing
 from mult import Stepper, led_on, led_off, led_state
 from shifter import Shifter
 
-
-### --- Hardware Setup --- ###
-DATA = 16
-CLOCK = 20
-LATCH = 21
-sh = Shifter(DATA, CLOCK, LATCH)
+data = 16
+clock = 20
+latch = 21
+s = Shifter(data, clock, latch)
 
 lock1 = multiprocessing.Lock()
 lock2 = multiprocessing.Lock()
 
-m1 = Stepper(sh, lock1)    # Azimuth
-m2 = Stepper(sh, lock2)    # Elevation
+m1 = Stepper(s, lock1)    # Azimuth
+m2 = Stepper(s, lock2)    # Elevation
 
 POSITIONS_URL = "http://192.168.1.254:8000/positions.json"
 TEAM_ID = "1"
 
 
-### --- HTML Page --- ###
 def web_page(positions=""):
     html = """
     <html><head><title>Turret Control</title>
@@ -43,12 +40,12 @@ def web_page(positions=""):
     <h2>Set Azimuth & Elevation</h2>
     <form method="POST">
         <label>Azimuth (deg):
-            <input type="number" name="az_angle" step="1">
+            <input type="number" name="theta" step="1">
         </label><br>
         <label>Elevation (deg):
-            <input type="number" name="el_angle" step="1">
+            <input type="number" name="z" step="1">
         </label><br><br>
-        <button class="button" type="submit" name="move_both" value="1">Move Both</button>
+        <button class="button" type="submit" name="move" value="1">Move</button>
     </form>
 
     <h2>Set Zero</h2>
@@ -76,7 +73,6 @@ def web_page(positions=""):
     return html.encode("utf-8")
 
 
-### --- POST Parsing --- ###
 def parsePOST(msg):
     d = {}
     idx = msg.find("\r\n\r\n")
@@ -91,7 +87,6 @@ def parsePOST(msg):
     return d
 
 
-### --- Server Logic --- ###
 def serve_web_page():
     while True:
         conn, addr = s.accept()
@@ -102,25 +97,21 @@ def serve_web_page():
         if "POST" in msg:
             data = parsePOST(msg)
 
-            # Move both angles (if requested)
-            if "move_both" in data:
-                # Azimuth
-                if "az_angle" in data and data["az_angle"] != "":
+            if "move" in data:
+                if "theta" in data and data["theta"] != "":
                     try:
-                        az_target = float(data["az_angle"])
-                        m1.goAngle(az_target)
+                        theta_target = float(data["theta"])
+                        m1.goAngle(theta_target)
                     except Exception as e:
                         print("AZ move error:", e)
 
-                # Elevation
-                if "el_angle" in data and data["el_angle"] != "":
+                if "z" in data and data["z"] != "":
                     try:
-                        el_target = float(data["el_angle"])
-                        m2.goAngle(el_target)
+                        z_target = float(data["z"])
+                        m2.goAngle(z_target)
                     except Exception as e:
                         print("EL move error:", e)
 
-            # Set zero for a motor
             if "set_zero" in data:
                 if data["set_zero"] == "az":
                     m1.zero()
@@ -129,7 +120,6 @@ def serve_web_page():
                     m2.zero()
                     print("Elevation zero set")
 
-            # LED toggle
             if "led" in data and data["led"] == "toggle":
                 with led_state.get_lock():
                     if led_state.value == 0:
@@ -177,7 +167,6 @@ def serve_web_page():
                 pass
 
 
-### --- Start Web Server --- ###
 s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 s.bind(("", 8080))   # Change to 80 if needed
 s.listen(3)
@@ -186,7 +175,7 @@ t = threading.Thread(target=serve_web_page)
 t.daemon = True
 t.start()
 
-print("Open page at:  http://<your_pi_ip>:8080")
+print("Open page at:  http://<your_pi_ip>:8080") # dont need 8080 if i use socket 80
 
 while True:
     pass
