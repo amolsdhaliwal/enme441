@@ -140,8 +140,23 @@ def serve_web_page():
             # Read positions.json
             if "get_positions" in data:
                 try:
-                    r = requests.get(POSITIONS_URL, timeout=2)
-                    j = r.json()
+                    #r = requests.get(POSITIONS_URL, timeout=2)
+                    #j = r.json()
+                    # Mock JSON response
+                    j = {
+                        "turrets": {
+                            "1": {"r": 300.0, "theta": 2.580},
+                            "2": {"r": 300.0, "theta": 0.661},
+                            "3": {"r": 300.0, "theta": 5.152}
+                        },
+                        "globes": [
+                            {"r": 300.0, "theta": 1.015, "z": 20.4},
+                            {"r": 300.0, "theta": 4.512, "z": 32.0},
+                            {"r": 300.0, "theta": 3.979, "z": 10.8}
+                        ]
+                    }
+
+
                     mine = j["turrets"].get(TEAM_ID, "Not found")
                     positions_text = json.dumps(mine, indent=2)
                 except Exception as e:
