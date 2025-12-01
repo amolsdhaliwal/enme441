@@ -9,7 +9,6 @@ LED_PIN = 17
 gpio.setup(LED_PIN, gpio.OUT)
 gpio.output(LED_PIN, 0)
 
-# multiprocessing-friendly LED state
 led_state = multiprocessing.Value('i', 0)
 
 def led_on():
