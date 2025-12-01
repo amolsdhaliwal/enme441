@@ -153,6 +153,7 @@ def serve_web_page():
                             {"r": 300.0, "theta": 4.512, "z": 32.0},
                             {"r": 300.0, "theta": 3.979, "z": 10.8}
                         ]
+                    }
                     
 
                     # Format all locations for display
