@@ -130,9 +130,9 @@ def serve_web_page():
             # Read positions.json
             if "get_positions" in data:
                 try:
-                    #r = requests.get(POSITIONS_URL, timeout=2)
-                    #j = r.json()
-                    j = {
+                    r = requests.get(POSITIONS_URL, timeout=2)
+                    j = r.json()
+                    '''j = {
                         "turrets": {
                             "1": {"r": 300.0, "theta": 2.580},
                             "2": {"r": 300.0, "theta": 0.661},
@@ -143,7 +143,7 @@ def serve_web_page():
                             {"r": 300.0, "theta": 4.512, "z": 32.0},
                             {"r": 300.0, "theta": 3.979, "z": 10.8}
                         ]
-                    }
+                    } '''
                     
 
                     # Format all locations for display
