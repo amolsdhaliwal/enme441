@@ -19,7 +19,7 @@ m1 = Stepper(s, lock1)    # Azimuth
 m2 = Stepper(s, lock2)    # Elevation
 
 POSITIONS_URL = "http://192.168.1.254:8000/positions.json"
-TEAM_ID = "1"
+TEAM_ID = "19"
 
 
 def web_page(positions=""):
