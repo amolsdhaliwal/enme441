@@ -168,7 +168,7 @@ def serve_web_page():
 
 
 s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-s.bind(("", 8080))   # Change to 80 if needed
+s.bind(("", 80))   # Change to 80 if needed
 s.listen(3)
 
 t = threading.Thread(target=serve_web_page)
