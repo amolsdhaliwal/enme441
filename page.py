@@ -183,7 +183,7 @@ def serve_web_page():
                             # AUTOMATIC ROTATION + LASER FOR 3 SECONDS
                             # -----------------------------------------
                             try:
-                                m1.goAngle(theta_rot)
+                                m2.goAngle(theta_rot)
                                 led_on()
                                 time.sleep(3)
                                 led_off()
