@@ -3,61 +3,63 @@ import threading
 import requests
 import json
 import multiprocessing
+import time
 
 from mult import Stepper, led_on, led_off, led_state
 from shifter import Shifter
 
-### --- Hardware Setup --- ###
-DATA = 16
-CLOCK = 20
-LATCH = 21
-sh = Shifter(DATA, CLOCK, LATCH)
+data = 16
+clock = 20
+latch = 21
+s = Shifter(data, clock, latch)
 
 lock1 = multiprocessing.Lock()
 lock2 = multiprocessing.Lock()
 
-m1 = Stepper(sh, lock1)    # Azimuth
-m2 = Stepper(sh, lock2)    # Elevation
+m1 = Stepper(s, lock1)    # Azimuth
+m2 = Stepper(s, lock2)    # Elevation
 
 POSITIONS_URL = "http://192.168.1.254:8000/positions.json"
-TEAM_ID = "1"
+TEAM_ID = "19"
 
 
-### --- HTML Page --- ###
-def web_page(az, el, led_is_on, positions=""):
-    state_str = "ON" if led_is_on else "OFF"
-
+def web_page(positions=""):
     html = """
     <html><head><title>Turret Control</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <style>
     html{font-family: Helvetica; text-align:center; margin:0px auto;}
     .button{background:#e7bd3b; color:white; padding:10px 25px;
-            border:none; border-radius:4px; font-size:22px;}
+            border:none; border-radius:4px; font-size:22px; margin:6px;}
     .button2{background:#4286f4;}
-    input{font-size:20px;}
+    input{font-size:20px; margin:4px;}
     pre{width:80%; margin:auto; text-align:left; border:1px solid #ccc; padding:10px;}
     </style></head><body>
 
     <h1>Laser Turret Control</h1>
 
-    <h2>Azimuth:</h2>
+    <h2>Set Azimuth & Elevation</h2>
     <form method="POST">
-        <input type="hidden" name="motor" value="az">
-        <input type="text" name="angle">
-        <button class="button" type="submit">Move</button>
+        <label>Azimuth (theta) (deg):
+            <input type="number" name="theta" step="1">
+        </label><br>
+        <label>Elevation (z) (deg):
+            <input type="number" name="z" step="1">
+        </label><br><br>
+        <button class="button" type="submit" name="move" value="1">Move</button>
     </form>
 
-    <h2>Elevation:</h2>
+    <h2>Set Zero</h2>
     <form method="POST">
-        <input type="hidden" name="motor" value="el">
-        <input type="text" name="angle">
-        <button class="button" type="submit">Move</button>
+        <button class="button" type="submit" name="set_zero" value="az">Set Azimuth Zero</button>
+        <button class="button" type="submit" name="set_zero" value="el">Set Elevation Zero</button>
     </form>
 
-    <h2>LED: """ + state_str + """</h2>
+    <h2>LED</h2>
     <form method="POST">
-        <button class="button button2" type="submit" name="led" value="toggle">Toggle LED</button>
+        <button class="button button2" type="submit" name="led" value="toggle">
+            Toggle LED
+        </button>
     </form>
 
     <h2>positions.json</h2>
@@ -69,45 +71,56 @@ def web_page(az, el, led_is_on, positions=""):
 
     </body></html>
     """
-
     return html.encode("utf-8")
 
 
-### --- POST Parsing --- ###
 def parsePOST(msg):
     d = {}
-    idx = msg.find("\r\n\r\n") + 4
-    body = msg[idx:]
+    idx = msg.find("\r\n\r\n")
+    if idx == -1:
+        return d
+    body = msg[idx + 4:]
     pairs = body.split("&")
     for p in pairs:
         if "=" in p:
-            k, v = p.split("=")
+            k, v = p.split("=", 1)
             d[k] = v
     return d
 
 
-### --- Server Logic --- ###
 def serve_web_page():
     while True:
         conn, addr = s.accept()
         msg = conn.recv(4096).decode("utf-8")
 
         positions_text = ""
+
         if "POST" in msg:
             data = parsePOST(msg)
 
-            # Motor control
-            if "motor" in data and "angle" in data:
-                try:
-                    angle = float(data["angle"])
-                    if data["motor"] == "az":
-                        m1.goAngle(angle)
-                    elif data["motor"] == "el":
-                        m2.goAngle(angle)
-                except:
-                    pass
+            if "move" in data:
+                if "theta" in data and data["theta"] != "":
+                    try:
+                        theta_target = float(data["theta"])
+                        m1.goAngle(theta_target)
+                    except Exception as e:
+                        print("AZ move error:", e)
 
-            # LED toggle
+                if "z" in data and data["z"] != "":
+                    try:
+                        z_target = float(data["z"])
+                        m2.goAngle(z_target)
+                    except Exception as e:
+                        print("EL move error:", e)
+
+            if "set_zero" in data:
+                if data["set_zero"] == "az":
+                    m1.zero()
+                    print("Azimuth zero set")
+                elif data["set_zero"] == "el":
+                    m2.zero()
+                    print("Elevation zero set")
+
             if "led" in data and data["led"] == "toggle":
                 with led_state.get_lock():
                     if led_state.value == 0:
@@ -115,32 +128,88 @@ def serve_web_page():
                     else:
                         led_off()
 
-            # Read positions.json
+            # -------------------------
+            # LOAD POSITIONS + ROTATE
+            # -------------------------
             if "get_positions" in data:
                 try:
-                    r = requests.get(POSITIONS_URL, timeout=2)
-                    j = r.json()
-                    mine = j["turrets"].get(TEAM_ID, "Not found")
-                    positions_text = json.dumps(mine, indent=2)
-                except:
-                    positions_text = "Error loading file"
+                    # ---- USE LOCAL SAMPLE JSON ----
+                    j = {
+                        "turrets": {
+                            "1": {"r": 300.0, "theta": 2.580},
+                            "2": {"r": 300.0, "theta": 0.661},
+                            "3": {"r": 300.0, "theta": 5.152}
+                        },
+                        "globes": [
+                            {"r": 300.0, "theta": 1.015, "z": 20.4},
+                            {"r": 300.0, "theta": 4.512, "z": 32.0},
+                            {"r": 300.0, "theta": 3.979, "z": 10.8}
+                        ]
+                    }
 
-        # Current states
-        az = round(m1.angle.value, 2)
-        el = round(m2.angle.value, 2)
+                    turrets = j["turrets"]
 
-        with led_state.get_lock():
-            led_is_on = (led_state.value == 1)
+                    if TEAM_ID not in turrets:
+                        positions_text = f"Error: TEAM_ID {TEAM_ID} not in positions file."
+                    else:
+                        # ---- OUR TURRET ----
+                        our_theta_rad = turrets[TEAM_ID]["theta"]
+                        our_theta_deg = round(our_theta_rad * 180.0 / 3.1415926535)
 
-        # Respond
-        conn.send(b"HTTP/1.1 200 OK\r\n")
-        conn.send(b"Content-Type: text/html\r\n")
-        conn.send(b"Connection: close\r\n\r\n")
-        conn.sendall(web_page(az, el, led_is_on, positions_text))
-        conn.close()
+                        result_lines = []
+                        result_lines.append(f"Our turret angle (deg): {our_theta_deg}\n")
+                        result_lines.append("Computed target angles:\n")
+
+                        # ---- TARGET PROCESSING ----
+                        for tid, info in turrets.items():
+                            if tid == TEAM_ID:
+                                continue
+
+                            target_theta_rad = info["theta"]
+                            target_theta_deg = round(target_theta_rad * 180.0 / 3.1415926535)
+
+                            # Angle difference
+                            diff = abs(target_theta_deg - our_theta_deg) % 360
+
+                            # Rotation angle to hit target
+                            theta_rot = (180 - diff) / 2
+                            theta_rot = round(theta_rot)
+
+                            result_lines.append(
+                                f"Turret {tid}: abs={target_theta_deg}°, diff={diff}°, rotate={theta_rot}°"
+                            )
+
+                            # -----------------------------------------
+                            # AUTOMATIC ROTATION + LASER FOR 3 SECONDS
+                            # -----------------------------------------
+                            try:
+                                m1.goAngle(theta_rot)
+                                led_on()
+                                time.sleep(3)
+                                led_off()
+                            except Exception as e:
+                                print("Rotation/laser error:", e)
+
+                        positions_text = "\n".join(result_lines)
+
+                except Exception as e:
+                    positions_text = "Error loading file: " + str(e)
+
+        # Respond safely
+        try:
+            conn.send(b"HTTP/1.1 200 OK\r\n")
+            conn.send(b"Content-Type: text/html\r\n")
+            conn.send(b"Connection: close\r\n\r\n")
+            conn.sendall(web_page(positions_text))
+        except BrokenPipeError:
+            print("Client disconnected before response was sent")
+        finally:
+            try:
+                conn.close()
+            except:
+                pass
 
 
-### --- Start Web Server --- ###
 s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 s.bind(("", 80))
 s.listen(3)
@@ -149,7 +218,7 @@ t = threading.Thread(target=serve_web_page)
 t.daemon = True
 t.start()
 
-print("Open page at:  http://<your_pi_ip>")
+print("Open page at:  http://<your_pi_ip>/")
 
 while True:
     pass
