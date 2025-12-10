@@ -1,6 +1,5 @@
 import socket
 import threading
-import requests
 import json
 import multiprocessing
 import time
@@ -19,7 +18,6 @@ lock2 = multiprocessing.Lock()
 m1 = Stepper(s, lock1)    # Azimuth
 m2 = Stepper(s, lock2)    # Elevation
 
-POSITIONS_URL = "http://192.168.1.254:8000/positions.json"
 TEAM_ID = "19"
 
 
@@ -96,32 +94,32 @@ def serve_web_page():
         positions_text = ""
 
         if "POST" in msg:
-            data = parsePOST(msg)
+            data_post = parsePOST(msg)
 
-            if "move" in data:
-                if "theta" in data and data["theta"] != "":
+            if "move" in data_post:
+                if "theta" in data_post and data_post["theta"] != "":
                     try:
-                        theta_target = float(data["theta"])
+                        theta_target = float(data_post["theta"])
                         m1.goAngle(theta_target)
                     except Exception as e:
                         print("AZ move error:", e)
 
-                if "z" in data and data["z"] != "":
+                if "z" in data_post and data_post["z"] != "":
                     try:
-                        z_target = float(data["z"])
+                        z_target = float(data_post["z"])
                         m2.goAngle(z_target)
                     except Exception as e:
                         print("EL move error:", e)
 
-            if "set_zero" in data:
-                if data["set_zero"] == "az":
+            if "set_zero" in data_post:
+                if data_post["set_zero"] == "az":
                     m1.zero()
                     print("Azimuth zero set")
-                elif data["set_zero"] == "el":
+                elif data_post["set_zero"] == "el":
                     m2.zero()
                     print("Elevation zero set")
 
-            if "led" in data and data["led"] == "toggle":
+            if "led" in data_post and data_post["led"] == "toggle":
                 with led_state.get_lock():
                     if led_state.value == 0:
                         led_on()
@@ -131,19 +129,41 @@ def serve_web_page():
             # -------------------------
             # LOAD POSITIONS + ROTATE
             # -------------------------
-            if "get_positions" in data:
+            if "get_positions" in data_post:
                 try:
-                    # ---- USE LOCAL SAMPLE JSON ----
+                    # ---- LOCAL JSON ----
                     j = {
                         "turrets": {
-                            "1": {"r": 300.0, "theta": 2.580},
-                            "2": {"r": 300.0, "theta": 0.661},
-                            "3": {"r": 300.0, "theta": 5.152}
+                            "1": {"r": 300.0, "theta": 1.5882496193148399},
+                            "2": {"r": 300.0, "theta": 5.7246799465414},
+                            "3": {"r": 300.0, "theta": 4.572762640225144},
+                            "4": {"r": 300.0, "theta": 0.41887902047863906},
+                            "5": {"r": 300.0, "theta": 2.356194490192345},  # unique
+                            "6": {"r": 300.0, "theta": 0.6981317007977318},
+                            "7": {"r": 300.0, "theta": 5.794493116621174},
+                            "8": {"r": 300.0, "theta": 3.211405823669566},
+                            "9": {"r": 300.0, "theta": 5.8643062867009474},
+                            "10": {"r": 300.0, "theta": 2.007128639793479},
+                            "11": {"r": 300.0, "theta": 5.427973973702365},
+                            "12": {"r": 300.0, "theta": 0.890117918517108},
+                            "13": {"r": 300.0, "theta": 1.4835298641951802},
+                            "14": {"r": 300.0, "theta": 3.385938748868999},
+                            "15": {"r": 300.0, "theta": 0.7853981633974483},
+                            "16": {"r": 300.0, "theta": 3.036872898470133},
+                            "17": {"r": 300.0, "theta": 1.2915436464758039},
+                            "18": {"r": 300.0, "theta": 1.117010721276371},
+                            "19": {"r": 300.0, "theta": 0.017453292519943295},
+                            "20": {"r": 300.0, "theta": 5.026548245743669}
                         },
                         "globes": [
-                            {"r": 300.0, "theta": 1.015, "z": 20.4},
-                            {"r": 300.0, "theta": 4.512, "z": 32.0},
-                            {"r": 300.0, "theta": 3.979, "z": 10.8}
+                            {"r": 300.0, "theta": 3.385938748868999, "z": 103.0},
+                            {"r": 300.0, "theta": 6.19591884457987, "z": 16.0},
+                            {"r": 300.0, "theta": 1.2740903539558606, "z": 172.0},
+                            {"r": 300.0, "theta": 0.8203047484373349, "z": 197.0},
+                            {"r": 300.0, "theta": 5.654866776461628, "z": 90.0},
+                            {"r": 300.0, "theta": 1.0297442586766543, "z": 35.0},
+                            {"r": 300.0, "theta": 4.852015320544236, "z": 118.0},
+                            {"r": 300.0, "theta": 1.902408884673819, "z": 139.0}
                         ]
                     }
 
@@ -152,7 +172,6 @@ def serve_web_page():
                     if TEAM_ID not in turrets:
                         positions_text = f"Error: TEAM_ID {TEAM_ID} not in positions file."
                     else:
-                        # ---- OUR TURRET ----
                         our_theta_rad = turrets[TEAM_ID]["theta"]
                         our_theta_deg = round(our_theta_rad * 180.0 / 3.1415926535)
 
@@ -168,25 +187,31 @@ def serve_web_page():
                             target_theta_rad = info["theta"]
                             target_theta_deg = round(target_theta_rad * 180.0 / 3.1415926535)
 
-                            # Angle difference
                             diff = abs(target_theta_deg - our_theta_deg) % 360
-
-                            # Rotation angle to hit target
-                            theta_rot = (180 - diff) / 2
-                            theta_rot = round(theta_rot)
+                            theta_rot = round((180 - diff) / 2)
 
                             result_lines.append(
                                 f"Turret {tid}: abs={target_theta_deg}°, diff={diff}°, rotate={theta_rot}°"
                             )
 
-                            # -----------------------------------------
-                            # AUTOMATIC ROTATION + LASER FOR 3 SECONDS
-                            # -----------------------------------------
+                            # ---- AUTOMATIC ROTATION + LASER 3 SEC ----
                             try:
+                                # Laser OFF during movement
+                                led_off()
+
+                                # Rotate
                                 m2.goAngle(theta_rot)
+
+                                # Short pause to ensure movement completes
+                                time.sleep(0.5)
+
+                                # Laser ON for 3 sec
                                 led_on()
                                 time.sleep(3)
+
+                                # Laser OFF before next target
                                 led_off()
+
                             except Exception as e:
                                 print("Rotation/laser error:", e)
 
