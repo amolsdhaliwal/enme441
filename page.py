@@ -25,54 +25,27 @@ m2 = Stepper(s, lock2)    # Elevation
 TEAM_ID = "19"
 
 # -----------------------
+# GLOBAL STOP FLAG
+# -----------------------
+stop_fire = multiprocessing.Value('i', 0)
+
+# -----------------------
 # WEB PAGE
 # -----------------------
 def web_page(positions=""):
-    html = """
-    <html><head><title>Turret Control</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <style>
-    html{font-family: Helvetica; text-align:center; margin:0px auto;}
-    .button{background:#e7bd3b; color:white; padding:10px 25px;
-            border:none; border-radius:4px; font-size:22px; margin:6px;}
-    .button2{background:#4286f4;}
-    input{font-size:20px; margin:4px;}
-    pre{width:80%; margin:auto; text-align:left; border:1px solid #ccc; padding:10px;}
-    </style></head><body>
-
+    html = f"""
+    <html><head><title>Turret Control</title></head><body>
     <h1>Laser Turret Control</h1>
 
-    <h2>Set Azimuth & Elevation</h2>
     <form method="POST">
-        <label>Azimuth (theta) (deg):
-            <input type="number" name="theta" step="1">
-        </label><br>
-        <label>Elevation (z) (deg):
-            <input type="number" name="z" step="1">
-        </label><br><br>
-        <button class="button" type="submit" name="move" value="1">Move</button>
-    </form>
-
-    <h2>Set Zero</h2>
-    <form method="POST">
-        <button class="button" type="submit" name="set_zero" value="az">Set Azimuth Zero</button>
-        <button class="button" type="submit" name="set_zero" value="el">Set Elevation Zero</button>
-    </form>
-
-    <h2>LED</h2>
-    <form method="POST">
-        <button class="button button2" type="submit" name="led" value="toggle">
-            Toggle LED
+        <button type="submit" name="get_positions" value="1">Load</button>
+        <button type="submit" name="stop" value="1"
+            style="background:red;color:white;margin-left:10px;">
+            STOP
         </button>
     </form>
 
-    <h2>positions.json</h2>
-    <form method="POST">
-        <button class="button" type="submit" name="get_positions" value="1">Load</button>
-    </form>
-
-    <pre>""" + positions + """</pre>
-
+    <pre>{positions}</pre>
     </body></html>
     """
     return html.encode("utf-8")
@@ -84,8 +57,7 @@ def parsePOST(msg):
     if idx == -1:
         return d
     body = msg[idx + 4:]
-    pairs = body.split("&")
-    for p in pairs:
+    for p in body.split("&"):
         if "=" in p:
             k, v = p.split("=", 1)
             d[k] = v
@@ -99,44 +71,26 @@ def serve_web_page():
     while True:
         conn, addr = s.accept()
         msg = conn.recv(4096).decode("utf-8")
-
         positions_text = ""
 
         if "POST" in msg:
             data_post = parsePOST(msg)
 
             # -----------------------
-            # MANUAL MOVE
+            # STOP BUTTON
             # -----------------------
-            if "move" in data_post:
-                if data_post.get("theta", "") != "":
-                    m1.goAngle(float(data_post["theta"]))
-                if data_post.get("z", "") != "":
-                    m2.goAngle(float(data_post["z"]))
-
-            # -----------------------
-            # ZEROING
-            # -----------------------
-            if "set_zero" in data_post:
-                if data_post["set_zero"] == "az":
-                    m1.zero()
-                elif data_post["set_zero"] == "el":
-                    m2.zero()
-
-            # -----------------------
-            # LED TOGGLE
-            # -----------------------
-            if data_post.get("led") == "toggle":
+            if "stop" in data_post:
+                stop_fire.value = 1
                 with led_state.get_lock():
-                    if led_state.value == 0:
-                        led_on()
-                    else:
-                        led_off()
+                    led_off()
+                positions_text = "STOPPED firing sequence."
 
             # -----------------------
-            # LOAD POSITIONS
+            # LOAD & FIRE
             # -----------------------
             if "get_positions" in data_post:
+                stop_fire.value = 0
+
                 try:
                     j = {
                         "turrets": {
@@ -173,40 +127,75 @@ def serve_web_page():
                         ]
                     }
 
-                    turrets = j["turrets"]
-                    our_theta_deg = round(math.degrees(turrets[TEAM_ID]["theta"]))
+                    our_theta_deg = math.degrees(j["turrets"][TEAM_ID]["theta"])
+                    lines = [f"Our turret angle: {round(our_theta_deg,2)}°\n"]
 
-                    result = [f"Our turret angle: {our_theta_deg}°\n"]
+                    # =============================
+                    # TURRETS
+                    # =============================
+                    lines.append("=== TURRET TARGETS ===")
 
-                    for tid, info in turrets.items():
-                        if tid == TEAM_ID:
-                            continue
+                    for tid, t in j["turrets"].items():
+                        if tid == TEAM_ID or stop_fire.value:
+                            break
 
-                        target_theta_deg = round(math.degrees(info["theta"]))
+                        target_theta_deg = math.degrees(t["theta"])
                         diff = abs(target_theta_deg - our_theta_deg) % 360
-                        theta_rot = round((180 - diff) / 2)
+                        theta_rot = (180 - diff) / 2
 
-                        r = info["r"]
-                        z = info.get("z", 0)
+                        with led_state.get_lock():
+                            led_off()
 
+                        m1.goAngle(theta_rot)
+                        m2.goAngle(0)
+
+                        time.sleep(0.5)
+
+                        with led_state.get_lock():
+                            led_on()
+                        time.sleep(3)
+                        with led_state.get_lock():
+                            led_off()
+
+                        lines.append(f"Turret {tid}: az={round(theta_rot,2)}°, el=0°")
+
+                    # =============================
+                    # GLOBES
+                    # =============================
+                    lines.append("\n=== GLOBE TARGETS ===")
+
+                    for i, g in enumerate(j["globes"], start=1):
+                        if stop_fire.value:
+                            break
+
+                        target_theta_deg = math.degrees(g["theta"])
+                        diff = abs(target_theta_deg - our_theta_deg) % 360
+                        theta_rot = (180 - diff) / 2
+
+                        r = g["r"]
+                        z = g["z"]
                         D = 2 * r * math.cos(math.radians(theta_rot))
                         theta_z = math.degrees(math.atan(z / D)) if D > 0 else 0
 
-                        # ---- MOTION + LASER ----
-                        led_off()
+                        with led_state.get_lock():
+                            led_off()
+
                         m1.goAngle(theta_rot)
                         m2.goAngle(theta_z)
 
                         time.sleep(0.5)
-                        led_on()
-                        time.sleep(3)
-                        led_off()
 
-                        result.append(
-                            f"Turret {tid}: rot={theta_rot}°, elev={round(theta_z,2)}°"
+                        with led_state.get_lock():
+                            led_on()
+                        time.sleep(3)
+                        with led_state.get_lock():
+                            led_off()
+
+                        lines.append(
+                            f"Globe {i}: az={round(theta_rot,2)}°, el={round(theta_z,2)}°"
                         )
 
-                    positions_text = "\n".join(result)
+                    positions_text = "\n".join(lines)
 
                 except Exception as e:
                     positions_text = f"Error: {e}"
