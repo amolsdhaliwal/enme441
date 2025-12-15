@@ -200,7 +200,7 @@ def serve_web_page():
                                 led_off()
 
                                 # Rotate
-                                m2.goAngle(theta_rot)
+                                m1.goAngle(theta_rot)
 
                                 # Short pause to ensure movement completes
                                 time.sleep(0.5)
