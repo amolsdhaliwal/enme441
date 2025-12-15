@@ -1,5 +1,7 @@
 import socket
 import threading
+import requests
+import json
 import multiprocessing
 import time
 import math
@@ -7,272 +9,274 @@ import math
 from mult import Stepper, led_on, led_off, led_state
 from shifter import Shifter
 
-# ================== HARDWARE ==================
+# -----------------------------
+# HARDWARE SETUP
+# -----------------------------
 data = 16
 clock = 20
 latch = 21
-sft = Shifter(data, clock, latch)
+shifter = Shifter(data, clock, latch)
 
 lock1 = multiprocessing.Lock()
 lock2 = multiprocessing.Lock()
 
-m1 = Stepper(sft, lock1)   # Azimuth
-m2 = Stepper(sft, lock2)   # Elevation
+m1 = Stepper(shifter, lock1)    # Azimuth
+m2 = Stepper(shifter, lock2)    # Elevation
 
 TEAM_ID = "19"
+POSITIONS_URL = "http://192.168.1.254:8000/positions.json"
 
-# ================== GLOBAL STATE ==================
-stop_event = threading.Event()
-status_lines = []
-status_lock = threading.Lock()
-
-current_az = 0.0
-current_el = 0.0
-
-
-# ================== WEB PAGE ==================
-def web_page():
-    with status_lock:
-        log = "\n".join(status_lines[-60:])
-
-    led_txt = "ON" if led_state.value else "OFF"
-
-    html = f"""
-<!DOCTYPE html>
-<html>
-<head>
-<title>Laser Turret Control</title>
-<style>
-body {{
-    font-family: Arial;
-    background:#111;
-    color:#eee;
-    padding:20px;
-}}
-h1 {{ color:#00ffcc; }}
-input {{ font-size:18px; width:80px; }}
-button {{
-    font-size:18px;
-    padding:8px 16px;
-    margin:4px;
-}}
-.fire {{ background:#2ecc71; }}
-.stop {{ background:#e74c3c; color:white; }}
-.laser {{ background:#f1c40f; }}
-pre {{
-    background:#222;
-    padding:12px;
-    border-radius:6px;
-    max-height:400px;
-    overflow-y:auto;
-}}
-</style>
-</head>
-
-<body>
-<h1>Laser Turret Control</h1>
-
-<p><b>Azimuth:</b> {current_az:.1f}°</p>
-<p><b>Elevation:</b> {current_el:.1f}°</p>
-<p><b>Laser:</b> {led_txt}</p>
-
-<hr>
-
-<h2>Manual Control (Calibration)</h2>
-<form method="POST">
-    Azimuth (deg):
-    <input type="number" step="1" name="az">
-    Elevation (deg):
-    <input type="number" step="1" name="el">
-    <br><br>
-    <button type="submit" name="move" value="1">Move</button>
-    <button type="submit" name="zero" value="az">Zero Azimuth</button>
-    <button type="submit" name="zero" value="el">Zero Elevation</button>
-</form>
-
-<hr>
-
-<h2>Laser Test</h2>
-<form method="POST">
-    <button class="laser" type="submit" name="laser" value="on">Laser ON</button>
-    <button class="laser" type="submit" name="laser" value="off">Laser OFF</button>
-</form>
-
-<hr>
-
-<h2>JSON Control</h2>
-<form method="POST">
-    <button class="fire" type="submit" name="fire" value="1">Load & Fire JSON</button>
-    <button class="stop" type="submit" name="stop" value="1">STOP</button>
-</form>
-
-<h2>Status</h2>
-<pre>{log}</pre>
-
-</body>
-</html>
-"""
-    return html.encode()
+# -----------------------------
+# GLOBAL STATE
+# -----------------------------
+loaded_targets = []   # [(az, el), ...]
+stop_firing = False
+positions_text = ""
 
 
-# ================== JSON ==================
-def load_json():
-    return {
-        "turrets": {
-            "1": {"r":300.0,"theta":1.5882496193148399},
-            "2": {"r":300.0,"theta":5.7246799465414},
-            "3": {"r":300.0,"theta":4.572762640225144},
-            "4": {"r":300.0,"theta":0.41887902047863906},
-            "5": {"r":300.0,"theta":2.356194490192345},
-            "6": {"r":300.0,"theta":0.6981317007977318},
-            "7": {"r":300.0,"theta":5.794493116621174},
-            "8": {"r":300.0,"theta":3.211405823669566},
-            "9": {"r":300.0,"theta":5.8643062867009474},
-            "10":{"r":300.0,"theta":2.007128639793479},
-            "11":{"r":300.0,"theta":5.427973973702365},
-            "12":{"r":300.0,"theta":0.890117918517108},
-            "13":{"r":300.0,"theta":1.4835298641951802},
-            "14":{"r":300.0,"theta":3.385938748868999},
-            "15":{"r":300.0,"theta":0.7853981633974483},
-            "16":{"r":300.0,"theta":3.036872898470133},
-            "17":{"r":300.0,"theta":1.2915436464758039},
-            "18":{"r":300.0,"theta":1.117010721276371},
-            "19":{"r":300.0,"theta":0.017453292519943295},
-            "20":{"r":300.0,"theta":5.026548245743669}
-        },
-        "globes": [
-            {"r":300.0,"theta":3.385938748868999,"z":103.0},
-            {"r":300.0,"theta":6.19591884457987,"z":16.0},
-            {"r":300.0,"theta":1.2740903539558606,"z":172.0},
-            {"r":300.0,"theta":0.8203047484373349,"z":197.0},
-            {"r":300.0,"theta":5.654866776461628,"z":90.0},
-            {"r":300.0,"theta":1.0297442586766543,"z":35.0},
-            {"r":300.0,"theta":4.852015320544236,"z":118.0},
-            {"r":300.0,"theta":1.902408884673819,"z":139.0}
-        ]
-    }
+# -----------------------------
+# WEB PAGE
+# -----------------------------
+def web_page(status="", positions=""):
+    laser_state = "ON" if led_state.value else "OFF"
+
+    return f"""
+    <html>
+    <head>
+        <title>Laser Turret Control</title>
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <style>
+            body {{ font-family: Helvetica; background:#111; color:#eee; text-align:center; }}
+            button {{ font-size:20px; padding:10px 25px; margin:6px; border:none; border-radius:4px; }}
+            .load {{ background:#2ecc71; }}
+            .fire {{ background:#e67e22; }}
+            .stop {{ background:#e74c3c; }}
+            .led {{ background:#3498db; }}
+            input {{ font-size:18px; margin:4px; width:80px; }}
+            pre {{ width:80%; margin:auto; text-align:left; background:#222; padding:10px; }}
+        </style>
+    </head>
+
+    <body>
+        <h1>Laser Turret Control</h1>
+
+        <h2>Manual Calibration</h2>
+        <form method="POST">
+            Azimuth (deg):
+            <input type="number" name="theta" step="1">
+            Elevation (deg):
+            <input type="number" name="z" step="1">
+            <br><br>
+            <button type="submit" name="move" value="1">Move</button>
+        </form>
+
+        <h2>Set Zero</h2>
+        <form method="POST">
+            <button type="submit" name="set_zero" value="az">Set Azimuth Zero</button>
+            <button type="submit" name="set_zero" value="el">Set Elevation Zero</button>
+        </form>
+
+        <h2>Laser</h2>
+        <form method="POST">
+            <button class="led" type="submit" name="led" value="toggle">
+                Toggle Laser
+            </button>
+        </form>
+        <p>Laser State: {laser_state}</p>
+
+        <h2>JSON Control</h2>
+        <form method="POST">
+            <button class="load" type="submit" name="load_json" value="1">Load Positions</button>
+            <button class="fire" type="submit" name="start_firing" value="1">Start Firing</button>
+            <button class="stop" type="submit" name="stop" value="1">STOP</button>
+        </form>
+
+        <h2>Status</h2>
+        <pre>{status}</pre>
+
+        <h2>positions.json</h2>
+        <pre>{positions}</pre>
+    </body>
+    </html>
+    """.encode("utf-8")
 
 
-# ================== FIRING THREAD ==================
-def fire_json():
-    global current_az, current_el
+# -----------------------------
+# POST PARSER
+# -----------------------------
+def parsePOST(msg):
+    d = {}
+    idx = msg.find("\r\n\r\n")
+    if idx == -1:
+        return d
+    body = msg[idx + 4:]
+    for p in body.split("&"):
+        if "=" in p:
+            k, v = p.split("=", 1)
+            d[k] = v
+    return d
 
-    stop_event.clear()
-    j = load_json()
 
-    our_deg = math.degrees(j["turrets"][TEAM_ID]["theta"])
+# -----------------------------
+# FIRING THREAD
+# -----------------------------
+def firing_sequence():
+    global stop_firing
 
-    with status_lock:
-        status_lines.append(f"OUR TURRET: {our_deg:.1f}°")
-        status_lines.append("---- TURRETS ----")
+    stop_firing = False
 
-    for tid, t in j["turrets"].items():
-        if tid == TEAM_ID or stop_event.is_set():
-            continue
-
-        tgt_deg = math.degrees(t["theta"])
-        diff = abs(tgt_deg - our_deg) % 360
-        az = (180 - diff) / 2
-
-        with status_lock:
-            status_lines.append(f"Turret {tid}: AZ {az:.1f}")
-
-        led_off()
-        m1.goAngle(az)
-        current_az = az
-
-        time.sleep(0.4)
-        led_on()
-        time.sleep(3)
-        led_off()
-
-    with status_lock:
-        status_lines.append("---- GLOBES ----")
-
-    for g in j["globes"]:
-        if stop_event.is_set():
+    for az, el in loaded_targets:
+        if stop_firing:
             break
-
-        az = math.degrees(g["theta"])
-        D = 2 * g["r"] * math.cos(math.radians(az))
-        el = math.degrees(math.atan2(g["z"], D))
-
-        with status_lock:
-            status_lines.append(f"Globe: AZ {az:.1f} EL {el:.1f}")
 
         led_off()
         m1.goAngle(az)
         m2.goAngle(el)
 
-        current_az = az
-        current_el = el
+        time.sleep(0.5)
 
-        time.sleep(0.4)
         led_on()
         time.sleep(3)
         led_off()
 
-    with status_lock:
-        status_lines.append("DONE")
 
-
-# ================== SERVER ==================
+# -----------------------------
+# SERVER LOOP
+# -----------------------------
 def serve():
-    s = socket.socket()
+    global loaded_targets, stop_firing, positions_text
+
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     s.bind(("", 80))
     s.listen(3)
 
-    global current_az, current_el
+    status = ""
 
     while True:
         conn, _ = s.accept()
-        msg = conn.recv(4096).decode()
+        msg = conn.recv(4096).decode("utf-8")
+        data = parsePOST(msg)
 
-        if "POST" in msg:
-            if "fire" in msg:
-                threading.Thread(target=fire_json, daemon=True).start()
+        # ---- Manual move ----
+        if "move" in data:
+            if data.get("theta"):
+                m1.goAngle(float(data["theta"]))
+            if data.get("z"):
+                m2.goAngle(float(data["z"]))
 
-            if "stop" in msg:
-                stop_event.set()
+        # ---- Zeroing ----
+        if "set_zero" in data:
+            if data["set_zero"] == "az":
+                m1.zero()
+            elif data["set_zero"] == "el":
+                m2.zero()
+
+        # ---- Laser toggle ----
+        if data.get("led") == "toggle":
+            if led_state.value:
                 led_off()
-                with status_lock:
-                    status_lines.append("STOPPED")
-
-            if "laser=on" in msg:
+            else:
                 led_on()
 
-            if "laser=off" in msg:
-                led_off()
+        # ---- STOP ----
+        if "stop" in data:
+            stop_firing = True
+            led_off()
+            status = "Firing stopped."
 
-            if "move" in msg:
-                if "az=" in msg:
-                    try:
-                        az = float(msg.split("az=")[1].split("&")[0])
-                        m1.goAngle(az)
-                        current_az = az
-                    except:
-                        pass
-                if "el=" in msg:
-                    try:
-                        el = float(msg.split("el=")[1].split("&")[0])
-                        m2.goAngle(el)
-                        current_el = el
-                    except:
-                        pass
+        # ---- LOAD JSON FROM URL ----
+        if "load_json" in data:
+            loaded_targets.clear()
 
-            if "zero=az" in msg:
-                m1.zero()
-                current_az = 0.0
+            try:
+                r = requests.get(POSITIONS_URL, timeout=2)
+                j = r.json()
 
-            if "zero=el" in msg:
-                m2.zero()
-                current_el = 0.0
+                # ---- OFFLINE TESTING OPTION ----
+                """
+                j = {
+                    "turrets": {
+                        "1":  {"r": 300.0, "theta": 1.5882496193148399},
+                        "2":  {"r": 300.0, "theta": 5.7246799465414},
+                        "3":  {"r": 300.0, "theta": 4.572762640225144},
+                        "4":  {"r": 300.0, "theta": 0.41887902047863906},
+                        "5":  {"r": 300.0, "theta": 0.017453292519943295},
+                        "6":  {"r": 300.0, "theta": 0.6981317007977318},
+                        "7":  {"r": 300.0, "theta": 5.794493116621174},
+                        "8":  {"r": 300.0, "theta": 3.211405823669566},
+                        "9":  {"r": 300.0, "theta": 5.8643062867009474},
+                        "10": {"r": 300.0, "theta": 2.007128639793479},
+                        "11": {"r": 300.0, "theta": 5.427973973702365},
+                        "12": {"r": 300.0, "theta": 0.890117918517108},
+                        "13": {"r": 300.0, "theta": 1.4835298641951802},
+                        "14": {"r": 300.0, "theta": 3.385938748868999},
+                        "15": {"r": 300.0, "theta": 0.7853981633974483},
+                        "16": {"r": 300.0, "theta": 3.036872898470133},
+                        "17": {"r": 300.0, "theta": 1.2915436464758039},
+                        "18": {"r": 300.0, "theta": 1.117010721276371},
+                        "19": {"r": 300.0, "theta": 0.017453292519943295},
+                        "20": {"r": 300.0, "theta": 5.026548245743669}
+                    },
+                    "globes": [
+                        {"r": 300.0, "theta": 3.385938748868999, "z": 103.0},
+                        {"r": 300.0, "theta": 6.19591884457987,  "z": 16.0},
+                        {"r": 300.0, "theta": 1.2740903539558606, "z": 172.0},
+                        {"r": 300.0, "theta": 0.8203047484373349, "z": 197.0},
+                        {"r": 300.0, "theta": 5.654866776461628, "z": 90.0},
+                        {"r": 300.0, "theta": 1.0297442586766543, "z": 35.0},
+                        {"r": 300.0, "theta": 4.852015320544236, "z": 118.0},
+                        {"r": 300.0, "theta": 1.902408884673819, "z": 139.0}
+                    ]
+                }
+                """
 
-        conn.send(b"HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n")
-        conn.sendall(web_page())
-        conn.close()
+
+                positions_text = json.dumps(j, indent=2)
+
+                our_theta = math.degrees(j["turrets"][TEAM_ID]["theta"])
+
+                # ---- Turrets first ----
+                for tid, t in j["turrets"].items():
+                    if tid == TEAM_ID:
+                        continue
+
+                    diff = abs(math.degrees(t["theta"]) - our_theta) % 360
+                    az = round((180 - diff) / 2)
+
+                    loaded_targets.append((az, 0.0))
+
+                # ---- Globes second (UNCHANGED elevation math) ----
+                for g in j["globes"]:
+                    diff = abs(math.degrees(g["theta"]) - our_theta) % 360
+                    az = round((180 - diff) / 2)
+
+                    D = 2 * g["r"] * math.cos(math.radians(az))
+                    el = math.degrees(math.atan(g["z"] / D))
+
+                    loaded_targets.append((az, el))
+
+                status = f"Loaded {len(loaded_targets)} targets from URL."
+
+            except Exception as e:
+                status = f"Error loading JSON: {e}"
+
+        # ---- START FIRING ----
+        if "start_firing" in data and loaded_targets:
+            threading.Thread(target=firing_sequence, daemon=True).start()
+            status = "Firing sequence started."
+
+        # ---- RESPOND ----
+        try:
+            conn.send(b"HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nConnection: close\r\n\r\n")
+            conn.sendall(web_page(status, positions_text))
+        except BrokenPipeError:
+            pass
+        finally:
+            conn.close()
 
 
-# ================== START ==================
-print("Open http://<pi-ip>/")
-serve()
+threading.Thread(target=serve, daemon=True).start()
+print("Open page at http://<pi_ip>/")
+
+while True:
+    time.sleep(1)
