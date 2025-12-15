@@ -3,10 +3,14 @@ import threading
 import json
 import multiprocessing
 import time
+import math
 
 from mult import Stepper, led_on, led_off, led_state
 from shifter import Shifter
 
+# -----------------------
+# HARDWARE SETUP
+# -----------------------
 data = 16
 clock = 20
 latch = 21
@@ -20,7 +24,9 @@ m2 = Stepper(s, lock2)    # Elevation
 
 TEAM_ID = "19"
 
-
+# -----------------------
+# WEB PAGE
+# -----------------------
 def web_page(positions=""):
     html = """
     <html><head><title>Turret Control</title>
@@ -86,6 +92,9 @@ def parsePOST(msg):
     return d
 
 
+# -----------------------
+# MAIN SERVER LOOP
+# -----------------------
 def serve_web_page():
     while True:
         conn, addr = s.accept()
@@ -96,49 +105,46 @@ def serve_web_page():
         if "POST" in msg:
             data_post = parsePOST(msg)
 
+            # -----------------------
+            # MANUAL MOVE
+            # -----------------------
             if "move" in data_post:
-                if "theta" in data_post and data_post["theta"] != "":
-                    try:
-                        theta_target = float(data_post["theta"])
-                        m1.goAngle(theta_target)
-                    except Exception as e:
-                        print("AZ move error:", e)
+                if data_post.get("theta", "") != "":
+                    m1.goAngle(float(data_post["theta"]))
+                if data_post.get("z", "") != "":
+                    m2.goAngle(float(data_post["z"]))
 
-                if "z" in data_post and data_post["z"] != "":
-                    try:
-                        z_target = float(data_post["z"])
-                        m2.goAngle(z_target)
-                    except Exception as e:
-                        print("EL move error:", e)
-
+            # -----------------------
+            # ZEROING
+            # -----------------------
             if "set_zero" in data_post:
                 if data_post["set_zero"] == "az":
                     m1.zero()
-                    print("Azimuth zero set")
                 elif data_post["set_zero"] == "el":
                     m2.zero()
-                    print("Elevation zero set")
 
-            if "led" in data_post and data_post["led"] == "toggle":
+            # -----------------------
+            # LED TOGGLE
+            # -----------------------
+            if data_post.get("led") == "toggle":
                 with led_state.get_lock():
                     if led_state.value == 0:
                         led_on()
                     else:
                         led_off()
 
-            # -------------------------
-            # LOAD POSITIONS + ROTATE
-            # -------------------------
+            # -----------------------
+            # LOAD POSITIONS
+            # -----------------------
             if "get_positions" in data_post:
                 try:
-                    # ---- LOCAL JSON ----
                     j = {
                         "turrets": {
                             "1": {"r": 300.0, "theta": 1.5882496193148399},
                             "2": {"r": 300.0, "theta": 5.7246799465414},
                             "3": {"r": 300.0, "theta": 4.572762640225144},
                             "4": {"r": 300.0, "theta": 0.41887902047863906},
-                            "5": {"r": 300.0, "theta": 2.356194490192345},  # unique
+                            "5": {"r": 300.0, "theta": 2.356194490192345},
                             "6": {"r": 300.0, "theta": 0.6981317007977318},
                             "7": {"r": 300.0, "theta": 5.794493116621174},
                             "8": {"r": 300.0, "theta": 3.211405823669566},
@@ -168,73 +174,51 @@ def serve_web_page():
                     }
 
                     turrets = j["turrets"]
+                    our_theta_deg = round(math.degrees(turrets[TEAM_ID]["theta"]))
 
-                    if TEAM_ID not in turrets:
-                        positions_text = f"Error: TEAM_ID {TEAM_ID} not in positions file."
-                    else:
-                        our_theta_rad = turrets[TEAM_ID]["theta"]
-                        our_theta_deg = round(our_theta_rad * 180.0 / 3.1415926535)
+                    result = [f"Our turret angle: {our_theta_deg}°\n"]
 
-                        result_lines = []
-                        result_lines.append(f"Our turret angle (deg): {our_theta_deg}\n")
-                        result_lines.append("Computed target angles:\n")
+                    for tid, info in turrets.items():
+                        if tid == TEAM_ID:
+                            continue
 
-                        # ---- TARGET PROCESSING ----
-                        for tid, info in turrets.items():
-                            if tid == TEAM_ID:
-                                continue
+                        target_theta_deg = round(math.degrees(info["theta"]))
+                        diff = abs(target_theta_deg - our_theta_deg) % 360
+                        theta_rot = round((180 - diff) / 2)
 
-                            target_theta_rad = info["theta"]
-                            target_theta_deg = round(target_theta_rad * 180.0 / 3.1415926535)
+                        r = info["r"]
+                        z = info.get("z", 0)
 
-                            diff = abs(target_theta_deg - our_theta_deg) % 360
-                            theta_rot = round((180 - diff) / 2)
+                        D = 2 * r * math.cos(math.radians(theta_rot))
+                        theta_z = math.degrees(math.atan(z / D)) if D > 0 else 0
 
-                            result_lines.append(
-                                f"Turret {tid}: abs={target_theta_deg}°, diff={diff}°, rotate={theta_rot}°"
-                            )
+                        # ---- MOTION + LASER ----
+                        led_off()
+                        m1.goAngle(theta_rot)
+                        m2.goAngle(theta_z)
 
-                            # ---- AUTOMATIC ROTATION + LASER 3 SEC ----
-                            try:
-                                # Laser OFF during movement
-                                led_off()
+                        time.sleep(0.5)
+                        led_on()
+                        time.sleep(3)
+                        led_off()
 
-                                # Rotate
-                                m1.goAngle(theta_rot)
+                        result.append(
+                            f"Turret {tid}: rot={theta_rot}°, elev={round(theta_z,2)}°"
+                        )
 
-                                # Short pause to ensure movement completes
-                                time.sleep(0.5)
-
-                                # Laser ON for 3 sec
-                                led_on()
-                                time.sleep(3)
-
-                                # Laser OFF before next target
-                                led_off()
-
-                            except Exception as e:
-                                print("Rotation/laser error:", e)
-
-                        positions_text = "\n".join(result_lines)
+                    positions_text = "\n".join(result)
 
                 except Exception as e:
-                    positions_text = "Error loading file: " + str(e)
+                    positions_text = f"Error: {e}"
 
-        # Respond safely
-        try:
-            conn.send(b"HTTP/1.1 200 OK\r\n")
-            conn.send(b"Content-Type: text/html\r\n")
-            conn.send(b"Connection: close\r\n\r\n")
-            conn.sendall(web_page(positions_text))
-        except BrokenPipeError:
-            print("Client disconnected before response was sent")
-        finally:
-            try:
-                conn.close()
-            except:
-                pass
+        conn.send(b"HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n")
+        conn.sendall(web_page(positions_text))
+        conn.close()
 
 
+# -----------------------
+# START SERVER
+# -----------------------
 s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 s.bind(("", 80))
 s.listen(3)
@@ -243,7 +227,7 @@ t = threading.Thread(target=serve_web_page)
 t.daemon = True
 t.start()
 
-print("Open page at:  http://<your_pi_ip>/")
+print("Open page at: http://<your_pi_ip>/")
 
 while True:
     pass
