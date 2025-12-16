@@ -38,8 +38,6 @@ positions_text = ""
 # -----------------------------
 def web_page(status="", positions=""):
     laser_state = "ON" if led_state.value else "OFF"
-    az_current = m1.angle.value
-    el_current = m2.angle.value
 
     return f"""
     <html>
@@ -74,11 +72,10 @@ def web_page(status="", positions=""):
                 text-align:left;
             }}
             input[type=range] {{
-                width: 80%;
+                width: 70%;
             }}
             input[type=number] {{
-                width: 60px;
-                font-size:16px;
+                width: 80px;
             }}
         </style>
     </head>
@@ -86,74 +83,34 @@ def web_page(status="", positions=""):
     <body>
         <h1>Laser Turret Control</h1>
 
-        <!-- ================= CALIBRATION ================= -->
-        <h2>Calibration (Sliders & Absolute Input)</h2>
+        <h2>Calibration</h2>
 
         <h3>Azimuth</h3>
-        <input type="range" id="az_slider" min="-5" max="5" step="0.1" value="0">
-        <span id="az_display">{az_current:.2f}°</span>
         <form method="POST">
-            Absolute: <input type="number" name="az_angle" step="0.1" value="{az_current:.2f}">
-            <button type="submit">Go</button>
+            <input type="range" name="slider_az" min="0" max="360" step="0.1" value="0" oninput="this.nextElementSibling.value=this.value">
+            <input type="number" name="input_az" value="0" step="0.1" oninput="this.previousElementSibling.value=this.value">
+            <button type="submit" name="move_az">Move</button>
         </form>
-        <script>
-            let last_val_az = 0;
-            const display_az = document.getElementById('az_display');
-            const slider_az = document.getElementById('az_slider');
-            slider_az.addEventListener('input', function() {{
-                let delta = parseFloat(this.value) - last_val_az;
-                last_val_az = parseFloat(this.value);
-                display_az.textContent = (parseFloat(display_az.textContent) + delta).toFixed(2) + '°';
-
-                if (Math.abs(delta) < 0.01) return;
-                fetch("/", {{
-                    method: "POST",
-                    body: "az_slider=" + delta,
-                    headers: {{ "Content-Type": "application/x-www-form-urlencoded" }}
-                }});
-            }});
-        </script>
 
         <h3>Elevation</h3>
-        <input type="range" id="el_slider" min="-5" max="5" step="0.1" value="0">
-        <span id="el_display">{el_current:.2f}°</span>
         <form method="POST">
-            Absolute: <input type="number" name="el_angle" step="0.1" value="{el_current:.2f}">
-            <button type="submit">Go</button>
+            <input type="range" name="slider_el" min="0" max="360" step="0.1" value="0" oninput="this.nextElementSibling.value=this.value">
+            <input type="number" name="input_el" value="0" step="0.1" oninput="this.previousElementSibling.value=this.value">
+            <button type="submit" name="move_el">Move</button>
         </form>
-        <script>
-            let last_val_el = 0;
-            const display_el = document.getElementById('el_display');
-            const slider_el = document.getElementById('el_slider');
-            slider_el.addEventListener('input', function() {{
-                let delta = parseFloat(this.value) - last_val_el;
-                last_val_el = parseFloat(this.value);
-                display_el.textContent = (parseFloat(display_el.textContent) + delta).toFixed(2) + '°';
 
-                if (Math.abs(delta) < 0.01) return;
-                fetch("/", {{
-                    method: "POST",
-                    body: "el_slider=" + delta,
-                    headers: {{ "Content-Type": "application/x-www-form-urlencoded" }}
-                }});
-            }});
-        </script>
-
-        <!-- ================= ZERO ================= -->
         <h2>Set Zero</h2>
         <form method="POST">
             <button class="zero" name="set_zero" value="az">Zero Azimuth</button>
             <button class="zero" name="set_zero" value="el">Zero Elevation</button>
         </form>
 
-        <!-- ================= LASER ================= -->
         <h2>Laser</h2>
         <form method="POST">
             <button class="led" name="led" value="toggle">Toggle Laser</button>
         </form>
         <p>Laser State: <b>{laser_state}</b></p>
 
-        <!-- ================= JSON CONTROL ================= -->
         <h2>JSON Control</h2>
         <form method="POST">
             <button class="load" name="load_json" value="1">Load Positions</button>
@@ -161,7 +118,6 @@ def web_page(status="", positions=""):
             <button class="stop" name="stop" value="1">STOP</button>
         </form>
 
-        <!-- ================= STATUS ================= -->
         <h2>Status</h2>
         <pre>{status}</pre>
 
@@ -197,10 +153,10 @@ def firing_sequence():
     for az, el in loaded_targets:
         if stop_firing:
             break
-
         led_off()
         m1.goAngle(az)
         m2.goAngle(el)
+        # Wait until both motors reach their target
         m1.wait()
         m2.wait()
         if stop_firing:
@@ -226,17 +182,18 @@ def serve():
         msg = conn.recv(4096).decode("utf-8")
         data = parsePOST(msg)
 
-        # ---- SLIDER MOVES ----
-        if "az_slider" in data:
-            m1.rotate(float(data["az_slider"]))
-        if "el_slider" in data:
-            m2.rotate(float(data["el_slider"]))
+        # ---- Calibration sliders / inputs ----
+        if "move_az" in data:
+            if "slider_az" in data:
+                m1.goAngle(float(data["slider_az"]))
+            elif "input_az" in data:
+                m1.goAngle(float(data["input_az"]))
 
-        # ---- ABSOLUTE MOVES ----
-        if "az_angle" in data:
-            m1.goAngle(float(data["az_angle"]))
-        if "el_angle" in data:
-            m2.goAngle(float(data["el_angle"]))
+        if "move_el" in data:
+            if "slider_el" in data:
+                m2.goAngle(float(data["slider_el"]))
+            elif "input_el" in data:
+                m2.goAngle(float(data["input_el"]))
 
         # ---- Zeroing ----
         if "set_zero" in data:
@@ -262,18 +219,49 @@ def serve():
         if "load_json" in data:
             loaded_targets.clear()
             try:
-                # Replace with requests.get for real URL
+                # --- Main retrieval from URL ---
+                r = requests.get(POSITIONS_URL, timeout=2)
+                j = r.json()
+
+                # --- Offline JSON fallback for testing ---
+                """
                 j = {
                     "turrets": {
                         "1": {"r": 182.8, "theta": 5.253441048502932},
                         "2": {"r": 182.8, "theta": 3.5081117965086026},
-                        "3": {"r": 182.8, "theta": 1.9198621771937625}
+                        "3": {"r": 182.8, "theta": 1.9198621771937625},
+                        "4": {"r": 182.8, "theta": 4.4505895925855405},
+                        "5": {"r": 182.8, "theta": 0.4363323129985824},
+                        "6": {"r": 182.8, "theta": 2.478367537831948},
+                        "7": {"r": 182.8, "theta": 1.6231562043547263},
+                        "8": {"r": 182.8, "theta": 5.707226654021458},
+                        "9": {"r": 182.8, "theta": 4.153883619746504},
+                        "10": {"r": 182.8, "theta": 3.3510321638291125},
+                        "11": {"r": 182.8, "theta": 4.71238898038469},
+                        "12": {"r": 182.8, "theta": 2.234021442552742},
+                        "13": {"r": 182.8, "theta": 2.9670597283903604},
+                        "14": {"r": 182.8, "theta": 0.8028514559173915},
+                        "15": {"r": 182.8, "theta": 1.239183768915974},
+                        "16": {"r": 182.8, "theta": 0.20943951023931953},
+                        "17": {"r": 182.8, "theta": 4.886921905584122},
+                        "18": {"r": 182.8, "theta": 3.1764992386296798},
+                        "19": {"r": 182.8, "theta": 3.9968039870670142},
+                        "20": {"r": 182.8, "theta": 6.2482787221397},
+                        "21": {"r": 182.8, "theta": 2.8099800957108703},
+                        "22": {"r": 182.8, "theta": 3.787364476827695}
                     },
-                    "globes": [{"r": 182.8, "theta": 3.05, "z": 162.6}]
+                    "globes": [
+                        {"r": 182.8, "theta": 3.05, "z": 162.6},
+                        {"r": 182.8, "theta": 1.047, "z": 195.6}
+                    ]
                 }
+                """
+
                 positions_text = json.dumps(j, indent=2)
 
                 our_theta = math.degrees(j["turrets"][TEAM_ID]["theta"])
+
+                # ---- Turrets first ----
                 for tid, t in j["turrets"].items():
                     if tid == TEAM_ID:
                         continue
@@ -281,6 +269,7 @@ def serve():
                     az = round((180 - diff) / 2)
                     loaded_targets.append((az, 0.0))
 
+                # ---- Globes second ----
                 for g in j["globes"]:
                     diff = abs(math.degrees(g["theta"]) - our_theta) % 360
                     az = round((180 - diff) / 2)
@@ -288,7 +277,7 @@ def serve():
                     el = math.degrees(math.atan(g["z"] / D))
                     loaded_targets.append((az, el))
 
-                status = f"Loaded {len(loaded_targets)} targets."
+                status = f"Loaded {len(loaded_targets)} targets from URL."
 
             except Exception as e:
                 status = f"Error loading JSON: {e}"
@@ -306,6 +295,7 @@ def serve():
             pass
         finally:
             conn.close()
+
 
 # -----------------------------
 # START SERVER
