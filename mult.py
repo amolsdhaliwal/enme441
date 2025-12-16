@@ -33,7 +33,7 @@ class Stepper:
     shifter_lock = multiprocessing.Lock()
     seq = [0b0001,0b0011,0b0010,0b0110,0b0100,0b1100,0b1000,0b1001]  # CCW sequence
     delay = 2000
-    steps_per_degree = 1024 / 360  # adjust for your motor
+    steps_per_degree = 4096 / 360  # adjust for your motor
 
     def __init__(self, shifter, lock):
         self.s = shifter
