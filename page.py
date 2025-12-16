@@ -46,59 +46,96 @@ def web_page(status="", positions=""):
         <title>Laser Turret Control</title>
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <style>
-            body {{ font-family: Helvetica; background:#111; color:#eee; text-align:center; }}
-            button {{ font-size:20px; padding:10px 25px; margin:6px; border:none; border-radius:4px; }}
+            body {{
+                font-family: Helvetica;
+                background:#111;
+                color:#eee;
+                text-align:center;
+            }}
+            button {{
+                font-size:18px;
+                padding:10px 18px;
+                margin:4px;
+                border:none;
+                border-radius:4px;
+                cursor:pointer;
+            }}
+            .az {{ background:#3498db; }}
+            .el {{ background:#9b59b6; }}
+            .zero {{ background:#95a5a6; }}
+            .led {{ background:#f1c40f; color:#000; }}
             .load {{ background:#2ecc71; }}
             .fire {{ background:#e67e22; }}
             .stop {{ background:#e74c3c; }}
-            .led {{ background:#3498db; }}
-            input {{ font-size:18px; margin:4px; width:80px; }}
-            pre {{ width:80%; margin:auto; text-align:left; background:#222; padding:10px; }}
+            pre {{
+                width:85%;
+                margin:auto;
+                background:#222;
+                padding:10px;
+                text-align:left;
+            }}
         </style>
     </head>
 
     <body>
         <h1>Laser Turret Control</h1>
 
-        <h2>Manual Calibration</h2>
+        <!-- ================= CALIBRATION ================= -->
+        <h2>Calibration (Jog Control)</h2>
+
+        <h3>Azimuth</h3>
         <form method="POST">
-            Azimuth (deg):
-            <input type="number" name="theta" step="1">
-            Elevation (deg):
-            <input type="number" name="z" step="1">
-            <br><br>
-            <button type="submit" name="move" value="1">Move</button>
+            <button class="az" name="jog_az" value="-5">-5°</button>
+            <button class="az" name="jog_az" value="-1">-1°</button>
+            <button class="az" name="jog_az" value="-0.1">-0.1°</button>
+            <button class="az" name="jog_az" value="0.1">+0.1°</button>
+            <button class="az" name="jog_az" value="1">+1°</button>
+            <button class="az" name="jog_az" value="5">+5°</button>
         </form>
 
+        <h3>Elevation</h3>
+        <form method="POST">
+            <button class="el" name="jog_el" value="-5">-5°</button>
+            <button class="el" name="jog_el" value="-1">-1°</button>
+            <button class="el" name="jog_el" value="-0.1">-0.1°</button>
+            <button class="el" name="jog_el" value="0.1">+0.1°</button>
+            <button class="el" name="jog_el" value="1">+1°</button>
+            <button class="el" name="jog_el" value="5">+5°</button>
+        </form>
+
+        <!-- ================= ZERO ================= -->
         <h2>Set Zero</h2>
         <form method="POST">
-            <button type="submit" name="set_zero" value="az">Set Azimuth Zero</button>
-            <button type="submit" name="set_zero" value="el">Set Elevation Zero</button>
+            <button class="zero" name="set_zero" value="az">Zero Azimuth</button>
+            <button class="zero" name="set_zero" value="el">Zero Elevation</button>
         </form>
 
+        <!-- ================= LASER ================= -->
         <h2>Laser</h2>
         <form method="POST">
-            <button class="led" type="submit" name="led" value="toggle">
-                Toggle Laser
-            </button>
+            <button class="led" name="led" value="toggle">Toggle Laser</button>
         </form>
-        <p>Laser State: {laser_state}</p>
+        <p>Laser State: <b>{laser_state}</b></p>
 
+        <!-- ================= JSON CONTROL ================= -->
         <h2>JSON Control</h2>
         <form method="POST">
-            <button class="load" type="submit" name="load_json" value="1">Load Positions</button>
-            <button class="fire" type="submit" name="start_firing" value="1">Start Firing</button>
-            <button class="stop" type="submit" name="stop" value="1">STOP</button>
+            <button class="load" name="load_json" value="1">Load Positions</button>
+            <button class="fire" name="start_firing" value="1">Start Firing</button>
+            <button class="stop" name="stop" value="1">STOP</button>
         </form>
 
+        <!-- ================= STATUS ================= -->
         <h2>Status</h2>
         <pre>{status}</pre>
 
         <h2>positions.json</h2>
         <pre>{positions}</pre>
+
     </body>
     </html>
     """.encode("utf-8")
+
 
 
 # -----------------------------
