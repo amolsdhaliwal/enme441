@@ -261,13 +261,13 @@ def serve():
                 for tid, t in j["turrets"].items():
                     if tid == TEAM_ID:
                         continue
-                    diff = abs(math.degrees(t["theta"]) - our_theta) % 360
+                    diff = (math.degrees(t["theta"]) - our_theta) % 360
                     az = round((180 - diff) / 2)
                     loaded_targets.append((az, 0.0))
 
                 # Globes
                 for g in j["globes"]:
-                    diff = abs(math.degrees(g["theta"]) - our_theta) % 360
+                    diff = (math.degrees(g["theta"]) - our_theta) % 360
                     az = round((180 - diff) / 2)
                     D = 2 * g["r"] * math.cos(math.radians(az))
                     el = math.degrees(math.atan(g["z"] / D))
