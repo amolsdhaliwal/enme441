@@ -220,11 +220,11 @@ def serve():
             loaded_targets.clear()
             try:
                 # --- Main retrieval from URL ---
-                r = requests.get(POSITIONS_URL, timeout=2)
-                j = r.json()
+               # r = requests.get(POSITIONS_URL, timeout=2)
+                #j = r.json()
 
                 # --- Offline JSON fallback for testing ---
-                """
+                
                 j = {
                     "turrets": {
                         "1": {"r": 182.8, "theta": 5.253441048502932},
@@ -255,7 +255,7 @@ def serve():
                         {"r": 182.8, "theta": 1.047, "z": 195.6}
                     ]
                 }
-                """
+                
 
                 positions_text = json.dumps(j, indent=2)
 
