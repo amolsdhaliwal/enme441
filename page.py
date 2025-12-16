@@ -71,11 +71,10 @@ def web_page(status="", positions=""):
                 padding:10px;
                 text-align:left;
             }}
-            input[type=range] {{
-                width: 70%;
-            }}
             input[type=number] {{
                 width: 80px;
+                font-size:16px;
+                padding:4px;
             }}
         </style>
     </head>
@@ -83,20 +82,22 @@ def web_page(status="", positions=""):
     <body>
         <h1>Laser Turret Control</h1>
 
-        <h2>Calibration</h2>
+        <h2>Calibration (Absolute & Relative)</h2>
 
         <h3>Azimuth</h3>
         <form method="POST">
-            <input type="range" name="slider_az" min="0" max="360" step="0.1" value="0" oninput="this.nextElementSibling.value=this.value">
-            <input type="number" name="input_az" value="0" step="0.1" oninput="this.previousElementSibling.value=this.value">
-            <button type="submit" name="move_az">Move</button>
+            <button name="jog_az" value="-1">-1°</button>
+            <button name="jog_az" value="1">+1°</button>
+            <input type="number" step="0.1" name="set_az" value="0">
+            <button name="move_az" value="1">Go</button>
         </form>
 
         <h3>Elevation</h3>
         <form method="POST">
-            <input type="range" name="slider_el" min="0" max="360" step="0.1" value="0" oninput="this.nextElementSibling.value=this.value">
-            <input type="number" name="input_el" value="0" step="0.1" oninput="this.previousElementSibling.value=this.value">
-            <button type="submit" name="move_el">Move</button>
+            <button name="jog_el" value="-1">-1°</button>
+            <button name="jog_el" value="1">+1°</button>
+            <input type="number" step="0.1" name="set_el" value="0">
+            <button name="move_el" value="1">Go</button>
         </form>
 
         <h2>Set Zero</h2>
@@ -149,14 +150,12 @@ def parsePOST(msg):
 def firing_sequence():
     global stop_firing
     stop_firing = False
-
     for az, el in loaded_targets:
         if stop_firing:
             break
         led_off()
         m1.goAngle(az)
         m2.goAngle(el)
-        # Wait until both motors reach their target
         m1.wait()
         m2.wait()
         if stop_firing:
@@ -182,18 +181,17 @@ def serve():
         msg = conn.recv(4096).decode("utf-8")
         data = parsePOST(msg)
 
-        # ---- Calibration sliders / inputs ----
-        if "move_az" in data:
-            if "slider_az" in data:
-                m1.goAngle(float(data["slider_az"]))
-            elif "input_az" in data:
-                m1.goAngle(float(data["input_az"]))
+        # ---- Relative jog ----
+        if "jog_az" in data:
+            m1.rotate(float(data["jog_az"]))
+        if "jog_el" in data:
+            m2.rotate(float(data["jog_el"]))
 
-        if "move_el" in data:
-            if "slider_el" in data:
-                m2.goAngle(float(data["slider_el"]))
-            elif "input_el" in data:
-                m2.goAngle(float(data["input_el"]))
+        # ---- Absolute move ----
+        if "move_az" in data and "set_az" in data:
+            m1.goAngle(float(data["set_az"]))
+        if "move_el" in data and "set_el" in data:
+            m2.goAngle(float(data["set_el"]))
 
         # ---- Zeroing ----
         if "set_zero" in data:
@@ -219,11 +217,10 @@ def serve():
         if "load_json" in data:
             loaded_targets.clear()
             try:
-                # --- Main retrieval from URL ---
-               # r = requests.get(POSITIONS_URL, timeout=2)
+                #r = requests.get(POSITIONS_URL, timeout=2)
                 #j = r.json()
-
-                # --- Offline JSON fallback for testing ---
+                
+                # --- Offline JSON fallback ---
                 
                 j = {
                     "turrets": {
@@ -256,12 +253,11 @@ def serve():
                     ]
                 }
                 
-
+                
                 positions_text = json.dumps(j, indent=2)
-
                 our_theta = math.degrees(j["turrets"][TEAM_ID]["theta"])
 
-                # ---- Turrets first ----
+                # Turrets first
                 for tid, t in j["turrets"].items():
                     if tid == TEAM_ID:
                         continue
@@ -269,7 +265,7 @@ def serve():
                     az = round((180 - diff) / 2)
                     loaded_targets.append((az, 0.0))
 
-                # ---- Globes second ----
+                # Globes
                 for g in j["globes"]:
                     diff = abs(math.degrees(g["theta"]) - our_theta) % 360
                     az = round((180 - diff) / 2)
@@ -277,7 +273,7 @@ def serve():
                     el = math.degrees(math.atan(g["z"] / D))
                     loaded_targets.append((az, el))
 
-                status = f"Loaded {len(loaded_targets)} targets from URL."
+                status = f"Loaded {len(loaded_targets)} targets."
 
             except Exception as e:
                 status = f"Error loading JSON: {e}"
@@ -296,7 +292,6 @@ def serve():
         finally:
             conn.close()
 
-
 # -----------------------------
 # START SERVER
 # -----------------------------
@@ -305,3 +300,4 @@ print("Open page at http://<pi_ip>/")
 
 while True:
     time.sleep(1)
+
