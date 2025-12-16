@@ -29,7 +29,7 @@ POSITIONS_URL = "http://192.168.1.254:8000/positions.json"
 # -----------------------------
 # GLOBAL STATE
 # -----------------------------
-loaded_targets = []   # [(az, el), ...]
+loaded_targets = []
 stop_firing = False
 positions_text = ""
 
@@ -59,6 +59,13 @@ def web_page(status="", positions=""):
                 border-radius:4px;
                 cursor:pointer;
             }}
+            input[type=range] {{
+                width:300px;
+            }}
+            input[type=number] {{
+                font-size:16px;
+                width:90px;
+            }}
             .az {{ background:#3498db; }}
             .el {{ background:#9b59b6; }}
             .zero {{ background:#95a5a6; }}
@@ -79,29 +86,33 @@ def web_page(status="", positions=""):
     <body>
         <h1>Laser Turret Control</h1>
 
-        <h2>Calibration (Jog Control)</h2>
+        <h2>Calibration</h2>
 
-        <h3>Azimuth</h3>
+        <h3>Azimuth Jog</h3>
         <form method="POST">
-            <button class="az" name="jog_az" value="-5">-5°</button>
-            <button class="az" name="jog_az" value="-1">-1°</button>
-            <button class="az" name="jog_az" value="-0.1">-0.1°</button>
-            <button class="az" name="jog_az" value="0.1">+0.1°</button>
-            <button class="az" name="jog_az" value="1">+1°</button>
-            <button class="az" name="jog_az" value="5">+5°</button>
+            <input type="range" min="-2" max="2" step="0.05"
+                   name="az_slider"
+                   oninput="this.form.submit(); this.value=0;">
         </form>
 
-        <h3>Elevation</h3>
         <form method="POST">
-            <button class="el" name="jog_el" value="-5">-5°</button>
-            <button class="el" name="jog_el" value="-1">-1°</button>
-            <button class="el" name="jog_el" value="-0.1">-0.1°</button>
-            <button class="el" name="jog_el" value="0.1">+0.1°</button>
-            <button class="el" name="jog_el" value="1">+1°</button>
-            <button class="el" name="jog_el" value="5">+5°</button>
+            <input type="number" step="0.1" name="az_goto" placeholder="deg">
+            <button class="az">Go</button>
         </form>
 
-        <h2>Set Zero</h2>
+        <h3>Elevation Jog</h3>
+        <form method="POST">
+            <input type="range" min="-2" max="2" step="0.05"
+                   name="el_slider"
+                   oninput="this.form.submit(); this.value=0;">
+        </form>
+
+        <form method="POST">
+            <input type="number" step="0.1" name="el_goto" placeholder="deg">
+            <button class="el">Go</button>
+        </form>
+
+        <h2>Zero</h2>
         <form method="POST">
             <button class="zero" name="set_zero" value="az">Zero Azimuth</button>
             <button class="zero" name="set_zero" value="el">Zero Elevation</button>
@@ -146,11 +157,10 @@ def parsePOST(msg):
     return d
 
 # -----------------------------
-# FIRING THREAD (FIXED)
+# FIRING THREAD
 # -----------------------------
 def firing_sequence():
     global stop_firing
-
     stop_firing = False
 
     for az, el in loaded_targets:
@@ -162,7 +172,6 @@ def firing_sequence():
         m1.goAngle(az)
         m2.goAngle(el)
 
-        # WAIT until BOTH motors finish
         m1.wait()
         m2.wait()
 
@@ -190,110 +199,45 @@ def serve():
         msg = conn.recv(4096).decode("utf-8")
         data = parsePOST(msg)
 
-        # ---- Jog controls ----
-        if "jog_az" in data:
-            m1.rotate(float(data["jog_az"]))
+        # ---- Slider jogs ----
+        if "az_slider" in data:
+            m1.rotate(float(data["az_slider"]))
 
-        if "jog_el" in data:
-            m2.rotate(float(data["jog_el"]))
+        if "el_slider" in data:
+            m2.rotate(float(data["el_slider"]))
 
-        # ---- Zeroing ----
+        # ---- Typed angle ----
+        if "az_goto" in data:
+            m1.goAngle(float(data["az_goto"]))
+
+        if "el_goto" in data:
+            m2.goAngle(float(data["el_goto"]))
+
+        # ---- Zero ----
         if "set_zero" in data:
             if data["set_zero"] == "az":
                 m1.zero()
             elif data["set_zero"] == "el":
                 m2.zero()
 
-        # ---- Laser toggle ----
+        # ---- Laser ----
         if data.get("led") == "toggle":
-            if led_state.value:
-                led_off()
-            else:
-                led_on()
+            led_off() if led_state.value else led_on()
 
-        # ---- STOP ----
+        # ---- Stop ----
         if "stop" in data:
             stop_firing = True
             led_off()
             status = "Firing stopped."
 
-        # ---- LOAD JSON ----
-        if "load_json" in data:
-            loaded_targets.clear()
-
-            try:
-                #r = requests.get(POSITIONS_URL, timeout=2)
-                #j = r.json()
-
-                
-                j = {
-                  "turrets": {
-                    "1": {"r": 182.8, "theta": 5.253441048502932},
-                    "2": {"r": 182.8, "theta": 3.5081117965086026},
-                    "3": {"r": 182.8, "theta": 1.9198621771937625},
-                    "4": {"r": 182.8, "theta": 4.4505895925855405},
-                    "5": {"r": 182.8, "theta": 0.4363323129985824},
-                    "6": {"r": 182.8, "theta": 2.478367537831948},
-                    "7": {"r": 182.8, "theta": 1.6231562043547263},
-                    "8": {"r": 182.8, "theta": 5.707226654021458},
-                    "9": {"r": 182.8, "theta": 4.153883619746504},
-                    "10": {"r": 182.8, "theta": 3.3510321638291125},
-                    "11": {"r": 182.8, "theta": 4.71238898038469},
-                    "12": {"r": 182.8, "theta": 2.234021442552742},
-                    "13": {"r": 182.8, "theta": 2.9670597283903604},
-                    "14": {"r": 182.8, "theta": 0.8028514559173915},
-                    "15": {"r": 182.8, "theta": 1.239183768915974},
-                    "16": {"r": 182.8, "theta": 0.20943951023931953},
-                    "17": {"r": 182.8, "theta": 4.886921905584122},
-                    "18": {"r": 182.8, "theta": 3.1764992386296798},
-                    "19": {"r": 182.8, "theta": 3.9968039870670142},
-                    "20": {"r": 182.8, "theta": 6.2482787221397},
-                    "21": {"r": 182.8, "theta": 2.8099800957108703},
-                    "22": {"r": 182.8, "theta": 3.787364476827695}
-                  },
-                  "globes": [
-                    {"r": 182.8, "theta": 3.05, "z": 162.6},
-                    {"r": 182.8, "theta": 1.047, "z": 195.6}
-                  ]
-                }
-                
-
-                positions_text = json.dumps(j, indent=2)
-
-                our_theta = math.degrees(j["turrets"][TEAM_ID]["theta"])
-
-                for tid, t in j["turrets"].items():
-                    if tid == TEAM_ID:
-                        continue
-                    diff = abs(math.degrees(t["theta"]) - our_theta) % 360
-                    az = round((180 - diff) / 2)
-                    loaded_targets.append((az, 0.0))
-
-                for g in j["globes"]:
-                    diff = abs(math.degrees(g["theta"]) - our_theta) % 360
-                    az = round((180 - diff) / 2)
-                    D = 2 * g["r"] * math.cos(math.radians(az))
-                    el = math.degrees(math.atan(g["z"] / D))
-                    loaded_targets.append((az, el))
-
-                status = f"Loaded {len(loaded_targets)} targets."
-
-            except Exception as e:
-                status = f"Error loading JSON: {e}"
-
-        # ---- START FIRING ----
+        # ---- Start ----
         if "start_firing" in data and loaded_targets:
             threading.Thread(target=firing_sequence, daemon=True).start()
             status = "Firing sequence started."
 
-        # ---- RESPOND ----
-        try:
-            conn.send(b"HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nConnection: close\r\n\r\n")
-            conn.sendall(web_page(status, positions_text))
-        except BrokenPipeError:
-            pass
-        finally:
-            conn.close()
+        conn.send(b"HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nConnection: close\r\n\r\n")
+        conn.sendall(web_page(status, positions_text))
+        conn.close()
 
 threading.Thread(target=serve, daemon=True).start()
 print("Open page at http://<pi_ip>/")
