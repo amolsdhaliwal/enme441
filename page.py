@@ -33,7 +33,6 @@ loaded_targets = []   # [(az, el), ...]
 stop_firing = False
 positions_text = ""
 
-
 # -----------------------------
 # WEB PAGE
 # -----------------------------
@@ -80,7 +79,6 @@ def web_page(status="", positions=""):
     <body>
         <h1>Laser Turret Control</h1>
 
-        <!-- ================= CALIBRATION ================= -->
         <h2>Calibration (Jog Control)</h2>
 
         <h3>Azimuth</h3>
@@ -103,21 +101,18 @@ def web_page(status="", positions=""):
             <button class="el" name="jog_el" value="5">+5°</button>
         </form>
 
-        <!-- ================= ZERO ================= -->
         <h2>Set Zero</h2>
         <form method="POST">
             <button class="zero" name="set_zero" value="az">Zero Azimuth</button>
             <button class="zero" name="set_zero" value="el">Zero Elevation</button>
         </form>
 
-        <!-- ================= LASER ================= -->
         <h2>Laser</h2>
         <form method="POST">
             <button class="led" name="led" value="toggle">Toggle Laser</button>
         </form>
         <p>Laser State: <b>{laser_state}</b></p>
 
-        <!-- ================= JSON CONTROL ================= -->
         <h2>JSON Control</h2>
         <form method="POST">
             <button class="load" name="load_json" value="1">Load Positions</button>
@@ -125,7 +120,6 @@ def web_page(status="", positions=""):
             <button class="stop" name="stop" value="1">STOP</button>
         </form>
 
-        <!-- ================= STATUS ================= -->
         <h2>Status</h2>
         <pre>{status}</pre>
 
@@ -135,8 +129,6 @@ def web_page(status="", positions=""):
     </body>
     </html>
     """.encode("utf-8")
-
-
 
 # -----------------------------
 # POST PARSER
@@ -153,9 +145,8 @@ def parsePOST(msg):
             d[k] = v
     return d
 
-
 # -----------------------------
-# FIRING THREAD
+# FIRING THREAD (FIXED)
 # -----------------------------
 def firing_sequence():
     global stop_firing
@@ -167,15 +158,20 @@ def firing_sequence():
             break
 
         led_off()
+
         m1.goAngle(az)
         m2.goAngle(el)
 
-        time.sleep(0.5)
+        # WAIT until BOTH motors finish
+        m1.wait()
+        m2.wait()
+
+        if stop_firing:
+            break
 
         led_on()
         time.sleep(3)
         led_off()
-
 
 # -----------------------------
 # SERVER LOOP
@@ -194,12 +190,12 @@ def serve():
         msg = conn.recv(4096).decode("utf-8")
         data = parsePOST(msg)
 
-        # ---- Manual move ----
-        if "move" in data:
-            if data.get("theta"):
-                m1.goAngle(float(data["theta"]))
-            if data.get("z"):
-                m2.goAngle(float(data["z"]))
+        # ---- Jog controls ----
+        if "jog_az" in data:
+            m1.rotate(float(data["jog_az"]))
+
+        if "jog_el" in data:
+            m2.rotate(float(data["jog_el"]))
 
         # ---- Zeroing ----
         if "set_zero" in data:
@@ -221,78 +217,66 @@ def serve():
             led_off()
             status = "Firing stopped."
 
-        # ---- LOAD JSON FROM URL ----
+        # ---- LOAD JSON ----
         if "load_json" in data:
             loaded_targets.clear()
 
             try:
-                r = requests.get(POSITIONS_URL, timeout=2)
-                j = r.json()
+                #r = requests.get(POSITIONS_URL, timeout=2)
+                #j = r.json()
 
-                # ---- OFFLINE TESTING OPTION ----
-                """
+                
                 j = {
-                    "turrets": {
-                        "1":  {"r": 300.0, "theta": 1.5882496193148399},
-                        "2":  {"r": 300.0, "theta": 5.7246799465414},
-                        "3":  {"r": 300.0, "theta": 4.572762640225144},
-                        "4":  {"r": 300.0, "theta": 0.41887902047863906},
-                        "5":  {"r": 300.0, "theta": 0.017453292519943295},
-                        "6":  {"r": 300.0, "theta": 0.6981317007977318},
-                        "7":  {"r": 300.0, "theta": 5.794493116621174},
-                        "8":  {"r": 300.0, "theta": 3.211405823669566},
-                        "9":  {"r": 300.0, "theta": 5.8643062867009474},
-                        "10": {"r": 300.0, "theta": 2.007128639793479},
-                        "11": {"r": 300.0, "theta": 5.427973973702365},
-                        "12": {"r": 300.0, "theta": 0.890117918517108},
-                        "13": {"r": 300.0, "theta": 1.4835298641951802},
-                        "14": {"r": 300.0, "theta": 3.385938748868999},
-                        "15": {"r": 300.0, "theta": 0.7853981633974483},
-                        "16": {"r": 300.0, "theta": 3.036872898470133},
-                        "17": {"r": 300.0, "theta": 1.2915436464758039},
-                        "18": {"r": 300.0, "theta": 1.117010721276371},
-                        "19": {"r": 300.0, "theta": 0.017453292519943295},
-                        "20": {"r": 300.0, "theta": 5.026548245743669}
-                    },
-                    "globes": [
-                        {"r": 300.0, "theta": 3.385938748868999, "z": 103.0},
-                        {"r": 300.0, "theta": 6.19591884457987,  "z": 16.0},
-                        {"r": 300.0, "theta": 1.2740903539558606, "z": 172.0},
-                        {"r": 300.0, "theta": 0.8203047484373349, "z": 197.0},
-                        {"r": 300.0, "theta": 5.654866776461628, "z": 90.0},
-                        {"r": 300.0, "theta": 1.0297442586766543, "z": 35.0},
-                        {"r": 300.0, "theta": 4.852015320544236, "z": 118.0},
-                        {"r": 300.0, "theta": 1.902408884673819, "z": 139.0}
-                    ]
+                  "turrets": {
+                    "1": {"r": 182.8, "theta": 5.253441048502932},
+                    "2": {"r": 182.8, "theta": 3.5081117965086026},
+                    "3": {"r": 182.8, "theta": 1.9198621771937625},
+                    "4": {"r": 182.8, "theta": 4.4505895925855405},
+                    "5": {"r": 182.8, "theta": 0.4363323129985824},
+                    "6": {"r": 182.8, "theta": 2.478367537831948},
+                    "7": {"r": 182.8, "theta": 1.6231562043547263},
+                    "8": {"r": 182.8, "theta": 5.707226654021458},
+                    "9": {"r": 182.8, "theta": 4.153883619746504},
+                    "10": {"r": 182.8, "theta": 3.3510321638291125},
+                    "11": {"r": 182.8, "theta": 4.71238898038469},
+                    "12": {"r": 182.8, "theta": 2.234021442552742},
+                    "13": {"r": 182.8, "theta": 2.9670597283903604},
+                    "14": {"r": 182.8, "theta": 0.8028514559173915},
+                    "15": {"r": 182.8, "theta": 1.239183768915974},
+                    "16": {"r": 182.8, "theta": 0.20943951023931953},
+                    "17": {"r": 182.8, "theta": 4.886921905584122},
+                    "18": {"r": 182.8, "theta": 3.1764992386296798},
+                    "19": {"r": 182.8, "theta": 3.9968039870670142},
+                    "20": {"r": 182.8, "theta": 6.2482787221397},
+                    "21": {"r": 182.8, "theta": 2.8099800957108703},
+                    "22": {"r": 182.8, "theta": 3.787364476827695}
+                  },
+                  "globes": [
+                    {"r": 182.8, "theta": 3.05, "z": 162.6},
+                    {"r": 182.8, "theta": 1.047, "z": 195.6}
+                  ]
                 }
-                """
-
+                
 
                 positions_text = json.dumps(j, indent=2)
 
                 our_theta = math.degrees(j["turrets"][TEAM_ID]["theta"])
 
-                # ---- Turrets first ----
                 for tid, t in j["turrets"].items():
                     if tid == TEAM_ID:
                         continue
-
                     diff = abs(math.degrees(t["theta"]) - our_theta) % 360
                     az = round((180 - diff) / 2)
-
                     loaded_targets.append((az, 0.0))
 
-                # ---- Globes second (UNCHANGED elevation math) ----
                 for g in j["globes"]:
                     diff = abs(math.degrees(g["theta"]) - our_theta) % 360
                     az = round((180 - diff) / 2)
-
                     D = 2 * g["r"] * math.cos(math.radians(az))
                     el = math.degrees(math.atan(g["z"] / D))
-
                     loaded_targets.append((az, el))
 
-                status = f"Loaded {len(loaded_targets)} targets from URL."
+                status = f"Loaded {len(loaded_targets)} targets."
 
             except Exception as e:
                 status = f"Error loading JSON: {e}"
@@ -310,7 +294,6 @@ def serve():
             pass
         finally:
             conn.close()
-
 
 threading.Thread(target=serve, daemon=True).start()
 print("Open page at http://<pi_ip>/")
