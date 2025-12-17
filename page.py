@@ -207,11 +207,11 @@ def serve_web_page():
         if "load_json" in data:
             loaded_targets.clear()
             try:
-                #r = requests.get(POSITIONS_URL, timeout=2)
-                #j = r.json()
+                r = requests.get(POSITIONS_URL, timeout=2)
+                j = r.json()
                 
                 # --- Offline JSON fallback ---
-                
+                """
                 j = {
                     "turrets": {
                         "1": {"r": 182.8, "theta": 5.253441048502932},#300ish deg
@@ -242,7 +242,7 @@ def serve_web_page():
                         {"r": 182.8, "theta": 1.047, "z": 195.6}
                     ]
                 }
-                
+                """
                 
                 positions_text = json.dumps(j, indent=2)
                 our_theta = math.degrees(j["turrets"][TEAM_ID]["theta"])
