@@ -282,11 +282,8 @@ def serve_web_page():
         finally:
             conn.close()
 
-# -----------------------------
-# START SERVER
-# -----------------------------
 threading.Thread(target=serve_web_page, daemon=True).start()
-print("Open page at http://<pi_ip>/")
+print("Open page at http://terrapi.local/")
 
 while True:
     time.sleep(1)
