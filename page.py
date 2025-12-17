@@ -9,9 +9,6 @@ import math
 from mult import Stepper, led_on, led_off, led_state
 from shifter import Shifter
 
-# -----------------------------
-# HARDWARE SETUP
-# -----------------------------
 data = 16
 clock = 20
 latch = 21
@@ -20,7 +17,7 @@ shifter = Shifter(data, clock, latch)
 lock1 = multiprocessing.Lock()
 lock2 = multiprocessing.Lock()
 
-m1 = Stepper(shifter, lock1)    # Azimuth
+m1 = Stepper(shifter, lock1)    # Azimuth (theta)
 m2 = Stepper(shifter, lock2)    # Elevation
 
 TEAM_ID = "19"
@@ -33,9 +30,7 @@ loaded_targets = []   # [(az, el), ...]
 stop_firing = False
 positions_text = ""
 
-# -----------------------------
-# WEB PAGE
-# -----------------------------
+
 def web_page(status="", positions=""):
     laser_state = "ON" if led_state.value else "OFF"
 
@@ -133,20 +128,17 @@ def web_page(status="", positions=""):
 # POST PARSER
 # -----------------------------
 def parsePOST(msg):
-    d = {}
+    data_dict = {}
     idx = msg.find("\r\n\r\n")
     if idx == -1:
-        return d
+        return data_dict
     body = msg[idx + 4:]
     for p in body.split("&"):
         if "=" in p:
             k, v = p.split("=", 1)
-            d[k] = v
-    return d
+            data_dict[k] = v
+    return data_dict
 
-# -----------------------------
-# FIRING THREAD
-# -----------------------------
 def firing_sequence():
     global stop_firing
     stop_firing = False
@@ -164,10 +156,8 @@ def firing_sequence():
         time.sleep(3)
         led_off()
 
-# -----------------------------
-# SERVER LOOP
-# -----------------------------
-def serve():
+
+def serve_web_page():
     global loaded_targets, stop_firing, positions_text
 
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -295,7 +285,7 @@ def serve():
 # -----------------------------
 # START SERVER
 # -----------------------------
-threading.Thread(target=serve, daemon=True).start()
+threading.Thread(target=serve_web_page, daemon=True).start()
 print("Open page at http://<pi_ip>/")
 
 while True:
