@@ -23,9 +23,7 @@ m2 = Stepper(shifter, lock2)    # Elevation
 TEAM_ID = "19"
 POSITIONS_URL = "http://192.168.1.254:8000/positions.json"
 
-# -----------------------------
-# GLOBAL STATE
-# -----------------------------
+
 loaded_targets = []   # [(az, el), ...]
 stop_firing = False
 positions_text = ""
@@ -124,9 +122,6 @@ def web_page(status="", positions=""):
     </html>
     """.encode("utf-8")
 
-# -----------------------------
-# POST PARSER
-# -----------------------------
 def parsePOST(msg):
     data_dict = {}
     idx = msg.find("\r\n\r\n")
@@ -139,16 +134,16 @@ def parsePOST(msg):
             data_dict[k] = v
     return data_dict
 
-def firing_sequence():
+def firing_sequence(): # firing operation
     global stop_firing
-    stop_firing = False
+    stop_firing = False # change state when firing
     for az, el in loaded_targets:
-        if stop_firing:
+        if stop_firing: # stop if necessary
             break
         led_off()
         m1.goAngle(az)
         m2.goAngle(el)
-        m1.wait()
+        m1.wait() # finish motor movements before turning laser
         m2.wait()
         if stop_firing:
             break
@@ -170,51 +165,45 @@ def serve_web_page():
         conn, _ = s.accept()
         msg = conn.recv(4096).decode("utf-8")
         data = parsePOST(msg)
-
-        # ---- Relative jog ----
-        if "jog_az" in data:
+# call for actions based on html input
+        if "jog_az" in data: 
             m1.rotate(float(data["jog_az"]))
         if "jog_el" in data:
             m2.rotate(float(data["jog_el"]))
 
-        # ---- Absolute move ----
         if "move_az" in data and "set_az" in data:
             m1.goAngle(float(data["set_az"]))
         if "move_el" in data and "set_el" in data:
             m2.goAngle(float(data["set_el"]))
 
-        # ---- Zeroing ----
         if "set_zero" in data:
             if data["set_zero"] == "az":
                 m1.zero()
             elif data["set_zero"] == "el":
                 m2.zero()
 
-        # ---- Laser toggle ----
         if data.get("led") == "toggle":
             if led_state.value:
                 led_off()
             else:
                 led_on()
 
-        # ---- STOP ----
         if "stop" in data:
             stop_firing = True
             led_off()
             status = "Firing stopped."
 
-        # ---- LOAD JSON ----
         if "load_json" in data:
-            loaded_targets.clear()
+            loaded_targets.clear() # clear old json
             try:
                 r = requests.get(POSITIONS_URL, timeout=2)
-                j = r.json()
+                j = r.json() 
                 
-                # --- Offline JSON fallback ---
+                # offline test for testing
                 """
                 j = {
                     "turrets": {
-                        "1": {"r": 182.8, "theta": 5.253441048502932},#300ish deg
+                        "1": {"r": 182.8, "theta": 5.253441048502932},
                         "2": {"r": 182.8, "theta": 3.5081117965086026},
                         "3": {"r": 182.8, "theta": 1.9198621771937625},
                         "4": {"r": 182.8, "theta": 4.4505895925855405},
@@ -229,11 +218,11 @@ def serve_web_page():
                         "13": {"r": 182.8, "theta": 2.9670597283903604},
                         "14": {"r": 182.8, "theta": 0.8028514559173915},
                         "15": {"r": 182.8, "theta": 1.239183768915974},
-                        "16": {"r": 182.8, "theta": 0.20943951023931953}, #49 deg 
+                        "16": {"r": 182.8, "theta": 0.20943951023931953}, 
                         "17": {"r": 182.8, "theta": 4.886921905584122},
                         "18": {"r": 182.8, "theta": 3.1764992386296798},
                         "19": {"r": 182.8, "theta": 3.9968039870670142}, # us (229)
-                        "20": {"r": 182.8, "theta": 6.2482787221397}, # 10 deg
+                        "20": {"r": 182.8, "theta": 6.2482787221397}, 
                         "21": {"r": 182.8, "theta": 2.8099800957108703},
                         "22": {"r": 182.8, "theta": 3.787364476827695} 
                     },
@@ -247,20 +236,18 @@ def serve_web_page():
                 positions_text = json.dumps(j, indent=2)
                 our_theta = math.degrees(j["turrets"][TEAM_ID]["theta"])
 
-                # Turrets first
                 for tid, t in j["turrets"].items():
-                    if tid == TEAM_ID:
+                    if tid == TEAM_ID: #skip self
                         continue
-                    diff = -(math.degrees(t["theta"]) - our_theta) % 360
-                    az = round((180 - diff) / 2)
-                    loaded_targets.append((az, 0.0))
+                    diff = -(math.degrees(t["theta"]) - our_theta) % 360 # find difference between us and target angle
+                    az = round((180 - diff) / 2) # using trig, make isosceles triangle to find the angle needed to reach target
+                    loaded_targets.append((az, 0.0)) # elevation angle 0 for all turrets
 
-                # Globes
                 for g in j["globes"]:
                     diff = -(math.degrees(g["theta"]) - our_theta) % 360
                     az = round((180 - diff) / 2)
-                    D = 2 * g["r"] * math.cos(math.radians(az))
-                    el = math.degrees(math.atan(g["z"] / D))
+                    D = 2 * g["r"] * math.cos(math.radians(az)) # using angle from isosceles, split into two right triangles to find the direct distance to the globe
+                    el = math.degrees(math.atan(g["z"] / D)) # using a right triangle, find angle height using distance and height of glove
                     loaded_targets.append((az, el))
 
                 status = f"Loaded {len(loaded_targets)} targets."
@@ -268,12 +255,9 @@ def serve_web_page():
             except Exception as e:
                 status = f"Error loading JSON: {e}"
 
-        # ---- START FIRING ----
         if "start_firing" in data and loaded_targets:
             threading.Thread(target=firing_sequence, daemon=True).start()
             status = "Firing sequence started."
-
-        # ---- RESPOND ----
         try:
             conn.send(b"HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nConnection: close\r\n\r\n")
             conn.sendall(web_page(status, positions_text))
