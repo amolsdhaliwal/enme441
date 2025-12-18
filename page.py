@@ -247,7 +247,7 @@ def serve_web_page():
                     diff = -(math.degrees(g["theta"]) - our_theta) % 360
                     az = round((180 - diff) / 2)
                     D = 2 * g["r"] * math.cos(math.radians(az)) # using angle from isosceles, split into two right triangles to find the direct distance to the globe
-                    el = math.degrees(math.atan(g["z"] / D)) # using a right triangle, find angle height using distance and height of glove
+                    el = math.degrees(math.atan(g["z"] / D)) # using a right triangle, find angle  using distance and height of globe
                     loaded_targets.append((az, el))
 
                 status = f"Loaded {len(loaded_targets)} targets."
