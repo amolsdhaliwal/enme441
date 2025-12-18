@@ -1,6 +1,6 @@
 import time
 import multiprocessing
-from shifter import Shifter   # our custom Shifter class
+from shifter import Shifter   # Shifter class
 import RPi.GPIO as gpio
 
 gpio.setmode(gpio.BCM)
