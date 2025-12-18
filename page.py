@@ -17,16 +17,16 @@ shifter = Shifter(data, clock, latch)
 lock1 = multiprocessing.Lock()
 lock2 = multiprocessing.Lock()
 
-m1 = Stepper(shifter, lock1)    # Azimuth (theta)
-m2 = Stepper(shifter, lock2)    # Elevation
+m1 = Stepper(shifter, lock1)    # azimuth (theta)
+m2 = Stepper(shifter, lock2)    # elevation
 
 TEAM_ID = "19"
 POSITIONS_URL = "http://192.168.1.254:8000/positions.json"
 
 
-loaded_targets = []   # [(az, el), ...]
-stop_firing = False
-positions_text = ""
+loaded_targets = []   # to store target coordinates [(az, el), ...]
+stop_firing = False # track firing
+positions_text = "" # initialize variable for positions from json
 
 
 def web_page(status="", positions=""):
@@ -140,12 +140,12 @@ def firing_sequence(): # firing operation
     for az, el in loaded_targets:
         if stop_firing: # stop if necessary
             break
-        led_off()
+        led_off() # make sure led off
         m1.goAngle(az)
         m2.goAngle(el)
         m1.wait() # finish motor movements before turning laser
         m2.wait()
-        if stop_firing:
+        if stop_firing: # second check for stop input
             break
         led_on()
         time.sleep(3)
